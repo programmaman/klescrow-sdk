@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+test/
+run-e2e.ps1
+run-dispute-e2e.ps1
