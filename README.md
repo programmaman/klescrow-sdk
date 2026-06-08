@@ -4,7 +4,7 @@
 
 ## What is this?
 
-Klescrow is a JavaScript / TypeScript library for holding funds safely between two parties using Ethereum smart contracts. Think of it as **an escrow transaction with a built-in dispute option**:
+Klescrow is a JavaScript / TypeScript library for holding funds safely between two parties using Ethereum smart contracts. Think of it as **a programmable escrow with a built-in dispute option**:
 
 - A **buyer** locks funds into a smart contract.
 - A **seller** delivers the goods or services.
