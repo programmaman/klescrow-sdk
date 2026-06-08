@@ -1,8 +1,12 @@
 node_modules/
 dist/
+dist-test/
+tsc
 .env
 .env.local
 .env.*.local
 test/
+tsconfig.test.json
+package.local.json
 run-e2e.ps1
 run-dispute-e2e.ps1
