@@ -69,12 +69,15 @@ const oneEthInWei = 1_000_000_000_000_000_000n;
 const { tx: createTx, escrowId } = await klescrow.factory.prepareCreateEthEscrow({
   netAmount:         oneEthInWei,
   sellerAddress,
-  expiryTimeUnixSec: BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60),
+  obligationDeadlineUnixSec: BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60),
+  settlementDeadlineUnixSec: 0n,
   termsHash:         KlescrowTxBuilder.termsHashFromUri('https://yoursite.com/terms/order-123'),
 });
 
+console.log('Create escrow preview:', createTx.preview);
+
 await signer.sendTransaction({ ...createTx, value: BigInt(createTx.value) });
-// → Escrow contract deployed on-chain.
+// → Escrow contract deployed on-chain.  The escrow address is in the receipt logs.
 
 // ─── Step 2: Find the deployed escrow ────────────────────────────────────────
 
@@ -86,13 +89,17 @@ const escrow = klescrow.escrow(addr);
 
 const { tx: depositTx } = await escrow.prepareDeposit();
 
+console.log('Deposit preview:', depositTx.preview);
+
 await signer.sendTransaction({ ...depositTx, value: BigInt(depositTx.value) });
 // → Funds locked.
 
 // ─── Step 4: Resolve ─────────────────────────────────────────────────────────
 
 // Seller approves on their device:
-//   await sellerSigner.sendTransaction(escrow.approvePayment());
+//   const sellerTx = escrow.approvePayment(ENV.seller.address);
+//   // console.log('Approve preview:', sellerTx.preview);
+//   await sellerSigner.sendTransaction(sellerTx);
 
 // Buyer approves on their device:
 await signer.sendTransaction(escrow.approvePayment());
@@ -110,6 +117,7 @@ const escrow = klescrow.escrow('0xESCROW_ADDRESS');
 
 // Raise a dispute. prepareRaiseDispute() fetches the arb fee from the chain.
 const { tx: disputeTx } = await escrow.prepareRaiseDispute();
+console.log('Dispute preview:', disputeTx.preview);
 await signer.sendTransaction({ ...disputeTx, value: BigInt(disputeTx.value) });
 // → State: DISPUTED
 
@@ -159,4 +167,4 @@ Full reference: [docs/error-decoder.md](docs/error-decoder.md).
 
 ## Smart Contract Disclosure
 
-**This software instantiates autonomous, immutable contracts. The author has zero administrative control or upgrade authority post-deployment. Users interact with this software entirely at their own risk.**
+**This software deploys autonomous, immutable contracts. The author has zero administrative control or upgrade authority over your deployed contracts. Every transaction includes a human-readable preview -- check it before signing to verify exactly what you are approving. Please be careful when transacting with others. Users interact with this software entirely at their own risk.**
