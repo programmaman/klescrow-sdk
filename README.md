@@ -64,10 +64,8 @@ const sellerAddress = '0xSELLER_WALLET_ADDRESS';
 
 // ─── Step 1: Create the escrow ───────────────────────────────────────────────
 
-const oneEthInWei = 1_000_000_000_000_000_000n;
-
 const { tx: createTx, escrowId } = await klescrow.factory.prepareCreateEthEscrow({
-  netAmount:         oneEthInWei,
+  netAmount:         ethers.parseEther("1"),
   sellerAddress,
   obligationDeadlineUnixSec: BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60),
   settlementDeadlineUnixSec: 0n,
