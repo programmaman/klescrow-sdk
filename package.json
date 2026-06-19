@@ -57,6 +57,7 @@
     "access": "public"
   },
   "files": [
-    "dist"
+    "dist/src",
+    "dist/generated"
   ]
 }
