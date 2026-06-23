@@ -34,6 +34,8 @@
     "node": ">=20"
   },
   "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "typechain": "typechain --target ethers-v6 --out-dir generated/typechain '../../../frontend/abi/Klescrow*.json'",
     "posttypechain": "node scripts/patch-typechain.mjs",
     "build": "tsc",
@@ -47,11 +49,14 @@
     "ethers": "^6.17.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@typechain/ethers-v6": "^0.5.1",
     "@types/node": "^20.0.0",
+    "eslint": "^10.5.0",
     "tsx": "^4.22.3",
     "typechain": "^8.3.2",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.61.1"
   },
   "publishConfig": {
     "access": "public"
