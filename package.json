@@ -1,6 +1,6 @@
 {
   "name": "@rakelabs/klescrow-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
   "description": "npm SDK for Klescrow escrow workflows",
   "license": "MIT",
