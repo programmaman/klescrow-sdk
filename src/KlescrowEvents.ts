@@ -110,7 +110,7 @@ export class KlescrowEvents {
      */
     tryDecodeEscrowCreated(log: EvmLog): EscrowCreatedEvent | undefined {
         if (!matchesTopic(log, TOPIC_ESCROW_CREATED)) return undefined;
-        const parsed = factoryIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = factoryIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             escrowId:           parsed.args.id                as string,
             escrowAddress:      parsed.args.escrow            as string,
@@ -135,7 +135,7 @@ export class KlescrowEvents {
      */
     tryDecodeFunded(log: EvmLog): FundedEvent | undefined {
         if (!matchesTopic(log, TOPIC_FUNDED)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             depositor:      parsed.args.depositor      as string,
             amount:         parsed.args.amount         as bigint,
@@ -150,7 +150,7 @@ export class KlescrowEvents {
      */
     tryDecodeResolved(log: EvmLog): ResolvedEvent | undefined {
         if (!matchesTopic(log, TOPIC_RESOLVED)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             seller:     parsed.args.seller     as string,
             sellerPaid: parsed.args.sellerPaid as bigint,
@@ -167,7 +167,7 @@ export class KlescrowEvents {
      */
     tryDecodeDisputeRaised(log: EvmLog): DisputeRaisedEvent | undefined {
         if (!matchesTopic(log, TOPIC_DISPUTE_RAISED)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             disputeId: parsed.args.disputeId as bigint,
             raisedBy:  parsed.args.raisedBy  as string,
@@ -181,7 +181,7 @@ export class KlescrowEvents {
      */
     tryDecodeCancelled(log: EvmLog): CancelledEvent | undefined {
         if (!matchesTopic(log, TOPIC_CANCELLED)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             cancelledBy: parsed.args.cancelledBy as string,
             logAddress:  log.address,
@@ -194,7 +194,7 @@ export class KlescrowEvents {
      */
     tryDecodeBuyerApproved(log: EvmLog): BuyerApprovedEvent | undefined {
         if (!matchesTopic(log, TOPIC_BUYER_APPROVED)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             buyer:  parsed.args.buyer as string,
             intent: escrowIntentFromOrdinal(Number(parsed.args.intent)),
@@ -208,7 +208,7 @@ export class KlescrowEvents {
      */
     tryDecodeSellerApproved(log: EvmLog): SellerApprovedEvent | undefined {
         if (!matchesTopic(log, TOPIC_SELLER_APPROVED)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             seller: parsed.args.seller as string,
             intent: escrowIntentFromOrdinal(Number(parsed.args.intent)),
@@ -222,7 +222,7 @@ export class KlescrowEvents {
      */
     tryDecodeExpiryExtended(log: EvmLog): ExpiryExtendedEvent | undefined {
         if (!matchesTopic(log, TOPIC_EXPIRY_EXTENDED)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             oldExpiry:  parsed.args.oldExpiry as bigint,
             newExpiry:  parsed.args.newExpiry as bigint,
@@ -236,7 +236,7 @@ export class KlescrowEvents {
      */
     tryDecodeTermsHashUpdated(log: EvmLog): TermsHashUpdatedEvent | undefined {
         if (!matchesTopic(log, TOPIC_TERMS_HASH_UPDATED)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             updatedBy:    parsed.args.updatedBy    as string,
             oldTermsHash: parsed.args.oldTermsHash as string,
@@ -251,7 +251,7 @@ export class KlescrowEvents {
      */
     tryDecodeEvidence(log: EvmLog): EscrowEvidenceEvent | undefined {
         if (!matchesTopic(log, TOPIC_EVIDENCE)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             arbitrator:      parsed.args[0] as string,
             evidenceGroupId: parsed.args[1] as bigint,
@@ -267,7 +267,7 @@ export class KlescrowEvents {
      */
     tryDecodeBuyerJoined(log: EvmLog): BuyerJoinedEvent | undefined {
         if (!matchesTopic(log, TOPIC_BUYER_JOINED)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             buyer:           parsed.args.buyer as string,
             logAddress:      log.address,
@@ -280,7 +280,7 @@ export class KlescrowEvents {
      */
     tryDecodeBuyerLeft(log: EvmLog): BuyerLeftEvent | undefined {
         if (!matchesTopic(log, TOPIC_BUYER_LEFT)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             buyer:           parsed.args.buyer as string,
             logAddress:      log.address,
@@ -293,7 +293,7 @@ export class KlescrowEvents {
      */
     tryDecodeSellerJoined(log: EvmLog): SellerJoinedEvent | undefined {
         if (!matchesTopic(log, TOPIC_SELLER_JOINED)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             seller:          parsed.args.seller as string,
             logAddress:      log.address,
@@ -306,7 +306,7 @@ export class KlescrowEvents {
      */
     tryDecodeSellerLeft(log: EvmLog): SellerLeftEvent | undefined {
         if (!matchesTopic(log, TOPIC_SELLER_LEFT)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             seller:          parsed.args.seller as string,
             logAddress:      log.address,
@@ -319,7 +319,7 @@ export class KlescrowEvents {
      */
     tryDecodeExpiryExtensionConsented(log: EvmLog): ExpiryExtensionConsentedEvent | undefined {
         if (!matchesTopic(log, TOPIC_EXPIRY_EXTENSION_CONSENTED)) return undefined;
-        const parsed = escrowIface.parseLog({ topics: log.topics as string[], data: log.data })!;
+        const parsed = escrowIface.parseLog({ topics: log.topics, data: log.data })!;
         return {
             party:                      parsed.args.party          as string,
             proposedObligationDeadline: parsed.args.proposedExpiry as bigint,

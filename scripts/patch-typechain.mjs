@@ -9,10 +9,11 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { readdirSync, statSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
+import { stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-const __dir     = dirname(fileURLToPath(import.meta.url));
-const typesDir  = resolve(__dir, '..', 'generated', 'typechain');
+const __dir = dirname(fileURLToPath(import.meta.url));
+const typesDir = resolve(__dir, '..', 'generated', 'typechain');
 
 function walk(dir) {
     const entries = readdirSync(dir);
@@ -39,9 +40,9 @@ function patch(file, fileDir) {
     );
     if (patched !== original) {
         writeFileSync(file, patched);
-        console.log(`✔ patched ${file.replace(typesDir, 'generated/typechain')}`);
+        stdout.write(`patched ${file.replace(typesDir, 'generated/typechain')}\n`);
     }
 }
 
 walk(typesDir);
-console.log('TypeChain NodeNext patch complete.');
+stdout.write('TypeChain NodeNext patch complete.\n');

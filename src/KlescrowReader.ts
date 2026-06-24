@@ -278,7 +278,7 @@ export class KlescrowReader {
 
         return {
             escrowAddress:              addr,
-            state:                      escrowStateFromOrdinal(Number(stateOrd as bigint)),
+            state:                      escrowStateFromOrdinal(Number(stateOrd)),
             buyer:                      buyer as string,
             seller:                     seller as string,
             creator:                    creator as string,
@@ -289,8 +289,8 @@ export class KlescrowReader {
             settlementDeadline:         settlementDeadline as bigint,
             termsHash:                  termsHash as string,
             disputeId:                  disputeId as bigint,
-            buyerIntent:                escrowIntentFromOrdinal(Number(buyerIntentOrd as bigint)),
-            sellerIntent:               escrowIntentFromOrdinal(Number(sellerIntentOrd as bigint)),
+            buyerIntent:                escrowIntentFromOrdinal(Number(buyerIntentOrd)),
+            sellerIntent:               escrowIntentFromOrdinal(Number(sellerIntentOrd)),
             proposedObligationDeadline: proposedObligationDeadline as bigint,
             arbitratorAddress:          arbitratorAddress as string,
             arbitratorConfiguration:    arbitratorConfiguration as string,

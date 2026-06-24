@@ -11,6 +11,21 @@ const MULTICALL3_ABI = [
     'view returns (tuple(bool success, bytes returnData)[] returnData)',
 ] as const;
 
+type Multicall3Call = {
+    target: string;
+    allowFailure: boolean;
+    callData: string;
+};
+
+type Multicall3Result = {
+    success: boolean;
+    returnData: string;
+};
+
+type Multicall3Contract = Contract & {
+    aggregate3(calls: Multicall3Call[]): Promise<Multicall3Result[]>;
+};
+
 // ─── Config ────────────────────────────────────────────────────────────────────
 
 export interface MulticallConfig {
@@ -60,7 +75,7 @@ export async function executeMulticall<T>(
 ): Promise<T[]> {
     if (calls.length === 0) return [];
 
-    const contract = new Contract(multicallAddress, MULTICALL3_ABI, provider);
+    const contract = new Contract(multicallAddress, MULTICALL3_ABI, provider) as Multicall3Contract;
 
     // Always pass allowFailure=true to aggregate3 so failed calls return (false, 0x)
     // instead of reverting the whole batch — we enforce requireSuccess ourselves in JS.
@@ -70,11 +85,10 @@ export async function executeMulticall<T>(
         callData:      c.callData,
     }));
 
-    const rawResults: Array<{ success: boolean; returnData: string }> =
-        await (contract.aggregate3 as typeof contract.aggregate3)(batch);
+    const rawResults = await contract.aggregate3(batch);
 
     return rawResults.map((r, i) => {
-        const c = calls[i]!;
+        const c = calls[i];
         if (!r.success && requireSuccess) {
             throw new Error(
                 `Multicall3 call failed — method="${c.method}" target=${c.target}`,

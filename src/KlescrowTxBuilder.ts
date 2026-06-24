@@ -110,8 +110,8 @@ export class KlescrowTxBuilder {
 
     constructor() {
         // Cast to base Interface — TypeChain's typed overloads are too strict for string-based encoding
-        this.factoryIface = KlescrowFactory__factory.createInterface() as unknown as Interface;
-        this.escrowIface  = Klescrow__factory.createInterface() as unknown as Interface;
+        this.factoryIface = KlescrowFactory__factory.createInterface();
+        this.escrowIface  = Klescrow__factory.createInterface();
         this.erc20Iface   = new Interface(ERC20_ABI);
     }
 

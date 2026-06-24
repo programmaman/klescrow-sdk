@@ -11,7 +11,7 @@ export enum EscrowState {
 
 export function escrowStateFromOrdinal(ordinal: number): EscrowState {
     if (ordinal < 0 || ordinal > 4) throw new Error(`Unknown EscrowState ordinal: ${ordinal}`);
-    return ordinal as EscrowState;
+    return ordinal;
 }
 
 /**
@@ -25,7 +25,7 @@ export enum EscrowIntent {
 
 export function escrowIntentFromOrdinal(ordinal: number): EscrowIntent {
     if (ordinal < 0 || ordinal > 2) throw new Error(`Unknown EscrowIntent ordinal: ${ordinal}`);
-    return ordinal as EscrowIntent;
+    return ordinal;
 }
 
 // ─── Reader result types ───────────────────────────────────────────────────────
