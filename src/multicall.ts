@@ -1,4 +1,4 @@
-import { Contract, type AbstractProvider } from 'ethers';
+import { Interface, type AbstractProvider } from 'ethers';
 
 /**
  * Minimal Multicall3 ABI — only aggregate3 is needed for batched reads.
@@ -11,20 +11,12 @@ const MULTICALL3_ABI = [
     'view returns (tuple(bool success, bytes returnData)[] returnData)',
 ] as const;
 
-type Multicall3Call = {
-    target: string;
-    allowFailure: boolean;
-    callData: string;
-};
-
 type Multicall3Result = {
     success: boolean;
     returnData: string;
 };
 
-type Multicall3Contract = Contract & {
-    aggregate3(calls: Multicall3Call[]): Promise<Multicall3Result[]>;
-};
+const multicall3Iface = new Interface(MULTICALL3_ABI);
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
@@ -75,8 +67,6 @@ export async function executeMulticall<T>(
 ): Promise<T[]> {
     if (calls.length === 0) return [];
 
-    const contract = new Contract(multicallAddress, MULTICALL3_ABI, provider) as Multicall3Contract;
-
     // Always pass allowFailure=true to aggregate3 so failed calls return (false, 0x)
     // instead of reverting the whole batch — we enforce requireSuccess ourselves in JS.
     const batch = calls.map(c => ({
@@ -85,7 +75,13 @@ export async function executeMulticall<T>(
         callData:      c.callData,
     }));
 
-    const rawResults = await contract.aggregate3(batch);
+    const encoded = multicall3Iface.encodeFunctionData('aggregate3', [batch]);
+    const resultData = await provider.call({
+        to:   multicallAddress,
+        data: encoded,
+    });
+    const decoded = multicall3Iface.decodeFunctionResult('aggregate3', resultData);
+    const rawResults = decoded[0] as Multicall3Result[];
 
     return rawResults.map((r, i) => {
         const c = calls[i];
