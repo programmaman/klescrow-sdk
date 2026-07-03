@@ -3,6 +3,7 @@ export * from './multicall.js';
 export * from './KlescrowTxBuilder.js';
 export * from './error-decoder.js';
 export * as KlescrowDeployments from './deployments.js';
+export { MAINNET, FACTORY_ADDRESS, DEFAULT_FACTORY_ADDRESS, getFactoryAddress, listDeployments } from './deployments.js';
 // Re-export common types so consumers don't need a separate @rakelabs/cartel-common-sdk dep
 export type { PreparedTx, SigningPreview, FeeBreakdown, FeeLineItem } from './common/index.js';
 export type { EvmLog } from './common/index.js';

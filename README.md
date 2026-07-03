@@ -1,168 +1,188 @@
 # @rakelabs/klescrow-sdk
 
-**Add on-chain escrow to your product in minutes. No blockchain expertise required.**
+Add escrow-backed transactions to an ethers v6 app. Klescrow prepares unsigned transactions for escrow creation, deposits, releases, refunds, evidence, disputes, and appeals; your user's wallet still signs and broadcasts every transaction.
 
-## What is this?
+The SDK never holds private keys and never takes custody of funds.
 
-Klescrow is a JavaScript / TypeScript library for holding funds safely between two parties using Ethereum smart contracts. Think of it as **a programmable escrow with a built-in dispute option**:
-
-- A **buyer** locks funds into a smart contract.
-- A **seller** delivers the goods or services.
-- Both parties agree the deal is done, and funds are released.
-- If there's a disagreement, **Kleros**, a decentralized arbitration protocol, decides the outcome.
-
-> **This library never touches your users' money.** It prepares unsigned transactions. Your app hands them to the user's wallet (MetaMask, WalletConnect). The user signs and submits. Your server never holds private keys.
-
-```
-Your app  ──→  klescrow SDK  ──→  unsigned transaction  ──→  User's wallet  ──→  Blockchain
-              (prepares it)        (just instructions)         (signs it)         (executes it)
+```text
+Your app -> Klescrow SDK -> unsigned transaction -> user wallet -> blockchain
 ```
 
-## Installation
+## Install
 
 ```bash
 npm install @rakelabs/klescrow-sdk ethers
 ```
 
-> Requires **ethers v6**. ethers v5 is not compatible.
+Requirements:
 
-## Escrow lifecycle
+- Node.js 20+
+- ethers v6
+- an EIP-1193 wallet provider, JSON-RPC provider, or compatible ethers provider
 
-The lifecycle mirrors a typical digital escrow: create, fund, resolve or dispute.
+## What You Build With It
 
-## Quick start
+Use this package when your product needs a buyer and seller to coordinate around locked funds:
 
-```ts
-import { Klescrow } from '@rakelabs/klescrow-sdk';
-import { BrowserProvider } from 'ethers';
+- the buyer creates an escrow and locks ETH or ERC20 tokens,
+- the seller performs the agreed work,
+- both parties approve release or refund,
+- either party can raise a Kleros dispute if they cannot agree,
+- evidence and appeal transactions can be prepared from the same bound escrow handle.
 
-const provider    = new BrowserProvider(window.ethereum);
-await provider.send('eth_requestAccounts', []);
-const signer      = await provider.getSigner();
-const myAddress   = await signer.getAddress();
+Every write method returns a `PreparedTx` with a `preview` field. Show that preview before asking a user to sign.
 
-// One line. Chain and factory address are auto-detected.
-const klescrow = await Klescrow.fromProvider(provider, myAddress);
-```
-
-## Happy path: ETH escrow in 4 steps
+## Quick Start
 
 ```ts
+import { BrowserProvider, ethers } from 'ethers';
 import { Klescrow, KlescrowTxBuilder } from '@rakelabs/klescrow-sdk';
-import { BrowserProvider } from 'ethers';
 
-// ─── Setup ────────────────────────────────────────────────────────────────────
-
-const provider    = new BrowserProvider(window.ethereum);
+const provider = new BrowserProvider(window.ethereum);
 await provider.send('eth_requestAccounts', []);
-const signer      = await provider.getSigner();
-const buyerWallet = await signer.getAddress();
 
-const klescrow = await Klescrow.fromProvider(provider, buyerWallet);
+const signer = await provider.getSigner();
+const buyerAddress = await signer.getAddress();
 
-const sellerAddress = '0xSELLER_WALLET_ADDRESS';
+const klescrow = await Klescrow.fromProvider(provider, buyerAddress);
 
-// ─── Step 1: Create the escrow ───────────────────────────────────────────────
-
+const now = BigInt(Math.floor(Date.now() / 1000));
 const { tx: createTx, escrowId } = await klescrow.factory.prepareCreateEthEscrow({
-  netAmount:         ethers.parseEther("1"),
-  sellerAddress,
-  obligationDeadlineUnixSec: BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60),
+  netAmount: ethers.parseEther('1'),
+  sellerAddress: '0xSELLER_ADDRESS',
+  obligationDeadlineUnixSec: now + 7n * 24n * 60n * 60n,
   settlementDeadlineUnixSec: 0n,
-  termsHash:         KlescrowTxBuilder.termsHashFromUri('https://yoursite.com/terms/order-123'),
+  termsHash: KlescrowTxBuilder.termsHashFromUri('https://example.com/orders/123/terms'),
 });
 
-console.log('Create escrow preview:', createTx.preview);
+console.log(createTx.preview);
 
-await signer.sendTransaction({ ...createTx, value: BigInt(createTx.value) });
-// → Escrow contract deployed on-chain.  The escrow address is in the receipt logs.
+const createResponse = await signer.sendTransaction({
+  to: createTx.to,
+  data: createTx.data,
+  value: BigInt(createTx.value),
+});
+await createResponse.wait();
 
-// ─── Step 2: Find the deployed escrow ────────────────────────────────────────
+const created = (await klescrow.factory.getLogsByParty('buyer', buyerAddress))
+  .find((event) => event.escrowId === escrowId);
 
-const logs   = await klescrow.factory.getLogsByParty('buyer', buyerWallet);
-const addr   = logs.find(e => e.escrowId === escrowId)!.escrowAddress;
-const escrow = klescrow.escrow(addr);
+if (!created) {
+  throw new Error('Escrow creation event was not found');
+}
 
-// ─── Step 3: Deposit ─────────────────────────────────────────────────────────
+const escrow = klescrow.escrow(created.escrowAddress);
 
 const { tx: depositTx } = await escrow.prepareDeposit();
-
-console.log('Deposit preview:', depositTx.preview);
-
-await signer.sendTransaction({ ...depositTx, value: BigInt(depositTx.value) });
-// → Funds locked.
-
-// ─── Step 4: Resolve ─────────────────────────────────────────────────────────
-
-// Seller approves on their device:
-//   const sellerTx = escrow.approvePayment(ENV.seller.address);
-//   // console.log('Approve preview:', sellerTx.preview);
-//   await sellerSigner.sendTransaction(sellerTx);
-
-// Buyer approves on their device:
-await signer.sendTransaction(escrow.approvePayment());
-// → Resolved.
+await signer.sendTransaction({
+  to: depositTx.to,
+  data: depositTx.data,
+  value: BigInt(depositTx.value),
+});
 ```
 
-> **ERC20 tokens?** The flow is the same: call `prepareCreateErc20Escrow`, approve the token, create, deposit. See [docs/erc20-escrow.md](docs/erc20-escrow.md).
+## Common Flows
 
-## Disputes
+### Release Funds
 
-When the parties can't agree, either one can raise a Kleros dispute, where a decentralized court of jurors votes on the outcome.
+Both parties express agreement by sending their own approval transaction from their own wallet.
 
 ```ts
 const escrow = klescrow.escrow('0xESCROW_ADDRESS');
 
-// Raise a dispute. prepareRaiseDispute() fetches the arb fee from the chain.
-const { tx: disputeTx } = await escrow.prepareRaiseDispute();
-console.log('Dispute preview:', disputeTx.preview);
-await signer.sendTransaction({ ...disputeTx, value: BigInt(disputeTx.value) });
-// → State: DISPUTED
+const approveTx = escrow.approvePayment();
+console.log(approveTx.preview);
 
-// Both parties submit evidence. IPFS links are recommended.
-await signer.sendTransaction(escrow.submitEvidence('ipfs://QmYourEvidenceDoc'));
+await signer.sendTransaction({
+  to: approveTx.to,
+  data: approveTx.data,
+  value: BigInt(approveTx.value),
+});
 ```
 
-> Appeals, ruling flow, and the complete dispute lifecycle are in [docs/disputes.md](docs/disputes.md).
+### Refund Funds
 
-## Decoding revert errors
+```ts
+const refundTx = escrow.approveRefund();
+await signer.sendTransaction({
+  to: refundTx.to,
+  data: refundTx.data,
+  value: BigInt(refundTx.value),
+});
+```
 
-When a transaction reverts on-chain, MetaMask shows a raw hex code. `decodeKlescrowError` turns it into a readable error name.
+### Raise a Dispute
+
+`prepareRaiseDispute()` reads the current Kleros arbitration cost and includes it as the transaction value.
+
+```ts
+const { tx: disputeTx, arbFeeWei } = await escrow.prepareRaiseDispute();
+
+console.log('Arbitration fee:', arbFeeWei.toString());
+console.log(disputeTx.preview);
+
+await signer.sendTransaction({
+  to: disputeTx.to,
+  data: disputeTx.data,
+  value: BigInt(disputeTx.value),
+});
+```
+
+### Submit Evidence
+
+Evidence is usually an `ipfs://...` URI produced by `@rakelabs/evidence-publisher`.
+
+```ts
+const evidenceTx = escrow.submitEvidence('ipfs://QmYourEvidenceDocument');
+await signer.sendTransaction({
+  to: evidenceTx.to,
+  data: evidenceTx.data,
+  value: BigInt(evidenceTx.value),
+});
+```
+
+## ETH vs ERC20
+
+For ETH escrows, the SDK includes the required ETH value in the prepared transaction.
+
+For ERC20 escrows, prepare the ERC20 creation flow with `prepareCreateErc20Escrow(...)`, approve the token allowance as needed, then create and deposit through the escrow contract. See [docs/erc20-escrow.md](docs/erc20-escrow.md).
+
+## Errors
+
+Use `decodeKlescrowError` to turn raw revert data into a readable contract error.
 
 ```ts
 import { decodeKlescrowError } from '@rakelabs/klescrow-sdk';
 
 try {
-  await signer.sendTransaction({ ...tx, value: BigInt(tx.value) });
+  await signer.sendTransaction({
+    to: tx.to,
+    data: tx.data,
+    value: BigInt(tx.value),
+  });
 } catch (err) {
   const decoded = decodeKlescrowError(err);
-
   if (decoded && 'error' in decoded) {
-    // "InvalidState", "NotParty", "EscrowAlreadyExists" …
-    showToast(`Transaction reverted: ${decoded.error}`);
-    console.log('Args:', decoded.args); // { sent: 100n, expectedMin: 200n }
-  } else if (decoded && 'raw' in decoded) {
-    // Unrecognized revert: surface the hex
-    console.warn('Unknown revert:', decoded.raw);
+    console.error(decoded.error, decoded.args);
   }
-  // decoded === null → not a contract revert (network error, user rejected, etc.)
 }
 ```
 
-Full reference: [docs/error-decoder.md](docs/error-decoder.md).
+## Documentation
 
-## Further reading
+| Document | Use it for |
+| --- | --- |
+| [docs/reference.md](docs/reference.md) | API reference, types, actions, events, and common mistakes |
+| [docs/erc20-escrow.md](docs/erc20-escrow.md) | ERC20 escrow setup and token approval flow |
+| [docs/disputes.md](docs/disputes.md) | Dispute, evidence, ruling, and appeal lifecycle |
+| [docs/error-decoder.md](docs/error-decoder.md) | Revert decoding details |
+| [docs/advanced.md](docs/advanced.md) | Reader, transaction builder, multicall, and implementation selection |
+| [docs/on-chain.md](docs/on-chain.md) | Contract-level behavior and event model |
 
-| Doc | Content |
-|-----|---------|
-| [docs/erc20-escrow.md](docs/erc20-escrow.md) | USDC / DAI / ERC20 token walkthrough |
-| [docs/disputes.md](docs/disputes.md) | Raising disputes, submitting evidence, appeals |
-| [docs/error-decoder.md](docs/error-decoder.md) | `decodeKlescrowError` reference and all error types |
-| [docs/reference.md](docs/reference.md) | Every action, error, and common mistake in one place |
-| [docs/advanced.md](docs/advanced.md) | Open escrows, multicall, wagmi/viem, implementation selection |
+## Safety Notes
 
----
-
-## Smart Contract Disclosure
-
-**This software deploys autonomous, immutable contracts. The author has zero administrative control over your balance or deployed contract. Every transaction includes a human-readable preview -- check it before signing to verify exactly what you are approving. Please be careful when transacting with others. Users interact with this software entirely at their own risk.**
+- Always show `tx.preview` before requesting a signature.
+- Store the escrow contract address after creation; it is the canonical on-chain handle.
+- Treat deadlines as Unix seconds.
+- Check chain IDs and contract addresses before sending transactions.
+- This software interacts with autonomous contracts. Users transact at their own risk.

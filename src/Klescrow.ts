@@ -22,13 +22,14 @@ import { KlescrowEvents, TOPIC_ESCROW_CREATED } from './KlescrowEvents.js';
 import { Escrow } from './Escrow.js';
 import { requireAddress, IdGenerator } from './common/index.js';
 import type { MulticallConfig } from './multicall.js';
-import { getFactoryAddress, listDeployments } from './deployments.js';
+import { FACTORY_ADDRESS, getFactoryAddress } from './deployments.js';
 
 // ─── SDK config ───────────────────────────────────────────────────────────────
 
 export interface KlescrowSdkConfig {
     chainId: number;
-    factoryAddress: string;
+    /** Defaults to the replayed Klescrow factory address. */
+    factoryAddress?: string;
     /** ethers AbstractProvider (JsonRpcProvider, BrowserProvider, …). */
     provider: AbstractProvider;
     /**
@@ -419,8 +420,10 @@ export class Klescrow {
     private readonly _wallet?:  string;
     private readonly _impl?:    string;
     constructor(config: KlescrowSdkConfig) {
-        requireAddress(config.factoryAddress, 'factoryAddress');
-        this._cfg      = { chainId: config.chainId, factoryAddress: config.factoryAddress };
+        const chainId = Klescrow._normalizeChainId(config.chainId);
+        const factoryAddress = config.factoryAddress ?? getFactoryAddress(chainId) ?? FACTORY_ADDRESS;
+        requireAddress(factoryAddress, 'factoryAddress');
+        this._cfg      = { chainId, factoryAddress };
         this._provider = config.provider;
         this._reader   = new KlescrowReader(config.provider, config.multicall);
         this._builder  = new KlescrowTxBuilder();
@@ -437,20 +440,24 @@ export class Klescrow {
     }
 
     /**
-     * Creates a `Klescrow` instance using a known deployment for the given chain ID.
+     * Creates a `Klescrow` instance using the replayed factory address for the given chain ID.
      *
      * Convenience equivalent to:
      * ```ts
-     * const factoryAddr = KlescrowDeployments.getFactoryAddress(chainId);
-     * if (!factoryAddr) throw ...;
-     * return new Klescrow({ chainId, factoryAddress: factoryAddr, provider, walletAddress, impl });
+     * return new Klescrow({
+     *   chainId,
+     *   factoryAddress: FACTORY_ADDRESS,
+     *   provider,
+     *   walletAddress,
+     *   impl,
+     * });
      * ```
      *
-     * @param chainId 1, 4, 5, 10, 137, 42161, 43114, 80001, 11155111, etc. Depending on factory deployments.
+     * @param chainId Any positive integer chain ID.
      * @param provider The provider to use for interacting with the blockchain.
      * @param walletAddress The address of the wallet to use for interacting with the escrow.
      * @param impl Optional escrow implementation. Omit to use the factory's live default.
-     * @throws if no known deployment exists for this chain ID.
+     * @throws if `chainId` is not a positive safe integer.
      */
     static forChain(
         chainId: number,
@@ -458,21 +465,12 @@ export class Klescrow {
         walletAddress?: string,
         impl?: EscrowImplementationInfo,
     ): Klescrow {
-        const factoryAddress = getFactoryAddress(chainId);
-        if (!factoryAddress) {
-            const known = listDeployments().map(d => d.chainId).join(', ');
-            throw new Error(
-                `No default Klescrow deployment known for chain ID ${chainId}. ` +
-                `Provide a factoryAddress explicitly via new Klescrow({ ... }). ` +
-                `Known chains: ${known}.`,
-            );
-        }
-        return new Klescrow({ chainId: Number(chainId), factoryAddress, provider, walletAddress, impl });
+        return new Klescrow({ chainId, provider, walletAddress, impl });
     }
 
     /**
      * Creates a `Klescrow` instance by auto-detecting the chain from the provider
-     * and resolving the factory address from known deployments.
+     * and using the canonical replayed factory address.
      *
      * This is the **recommended** entry point — zero config:
      * ```ts
@@ -496,7 +494,7 @@ export class Klescrow {
      * @param walletAddress     Optional — when set, all write ops pre-fill `callerWallet`.
      * @param implNameOrAddress Optional — name or address of a registered implementation.
      *                          Omit to use the factory's live default.
-     * @throws if the provider's chain ID has no known factory deployment.
+     * @throws if the provider returns an invalid chain ID.
      * @throws if `implNameOrAddress` is a name that doesn't match any registered implementation.
      */
     static async fromProvider(
@@ -505,22 +503,22 @@ export class Klescrow {
         implNameOrAddress?: string,
     ): Promise<Klescrow> {
         const { chainId } = await provider.getNetwork();
-        const factoryAddress = getFactoryAddress(Number(chainId));
-        if (!factoryAddress) {
-            const known = listDeployments().map(d => d.chainId).join(', ');
-            throw new Error(
-                `No default Klescrow deployment known for chain ID ${chainId}. ` +
-                `Provide a factoryAddress explicitly via new Klescrow({ ... }). ` +
-                `Known chains: ${known}.`,
-            );
-        }
+        const chainIdNumber = Klescrow._normalizeChainId(Number(chainId));
+        const factoryAddress = FACTORY_ADDRESS;
 
         let impl: EscrowImplementationInfo | undefined;
         if (implNameOrAddress) {
             impl = await this._resolveImpl(provider, factoryAddress, implNameOrAddress);
         }
 
-        return new Klescrow({ chainId: Number(chainId), factoryAddress, provider, walletAddress, impl });
+        return new Klescrow({ chainId: chainIdNumber, provider, walletAddress, impl });
+    }
+
+    private static _normalizeChainId(chainId: number): number {
+        if (!Number.isSafeInteger(chainId) || chainId <= 0) {
+            throw new Error(`Invalid Klescrow chain ID: ${chainId}.`);
+        }
+        return chainId;
     }
 
     private static async _resolveImpl(
@@ -548,7 +546,6 @@ export class Klescrow {
     }
 
     /**
-     * Creates a `Klescrow` instance using a known deployment for the given chain ID.
      * Returns an `Escrow` bound to the given deployed clone address.
      *
      * This is a **free, synchronous** operation — no network call is made.

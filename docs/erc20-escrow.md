@@ -1,71 +1,150 @@
 # ERC20 Token Escrow
 
-Use this when the escrow is funded with a token like USDC or DAI instead of ETH.
+Use this guide when an escrow is funded with an ERC20 token such as USDC, DAI, or a marketplace token instead of native ETH.
+
+The important difference from ETH is the approval sequence:
+
+1. The SDK predicts the escrow clone address.
+2. The buyer approves that predicted clone to pull the token amount.
+3. The buyer creates the escrow.
+4. The buyer deposits tokens into the escrow.
+
+The approval spender is the escrow clone, not the factory.
 
 ## Setup
 
-Same as the [ETH walkthrough](../README.md#happy-path-eth-escrow-in-4-steps). Create the provider, signer, and `Klescrow` instance:
-
 ```ts
-import { Klescrow, KlescrowTxBuilder } from '@rakelabs/klescrow-sdk';
 import { BrowserProvider } from 'ethers';
+import { Klescrow, KlescrowTxBuilder } from '@rakelabs/klescrow-sdk';
 
-const provider    = new BrowserProvider(window.ethereum);
+const provider = new BrowserProvider(window.ethereum);
 await provider.send('eth_requestAccounts', []);
-const signer      = await provider.getSigner();
-const buyerWallet = await signer.getAddress();
 
-const klescrow    = await Klescrow.fromProvider(provider, buyerWallet);
-const sellerAddr  = '0xSELLER_WALLET_ADDRESS';
+const signer = await provider.getSigner();
+const buyerAddress = await signer.getAddress();
+
+const klescrow = await Klescrow.fromProvider(provider, buyerAddress);
 ```
 
-## Walkthrough
+## Prepare Approval and Creation
 
 ```ts
-const usdcAddress    = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'; // USDC on mainnet
-const oneUsdcInUnits = 1_000_000n; // USDC has 6 decimals, so 1 USDC = 1,000,000
+const tokenAddress = '0xTOKEN_ADDRESS';
+const sellerAddress = '0xSELLER_ADDRESS';
 
-// ─── Step 1: Prepare create ──────────────────────────────────────────────────
+const oneTokenInBaseUnits = 1_000_000n;
+const obligationDeadline = BigInt(Math.floor(Date.now() / 1000) + 7 * 86400);
 
-const { approveTx, createTx, escrowId, predictedAddress } =
-  await klescrow.factory.prepareCreateErc20Escrow({
-    tokenAddress:      usdcAddress,
-    netAmount:         oneUsdcInUnits,
-    buyerAddress:      buyerWallet,
-    sellerAddress:     sellerAddr,
-    expiryTimeUnixSec: BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60),
-    termsHash:         KlescrowTxBuilder.termsHashFromUri('https://yoursite.com/terms/order-123'),
-  });
+const {
+  approveTx,
+  createTx,
+  escrowId,
+  predictedAddress,
+  gross,
+  fee,
+} = await klescrow.factory.prepareCreateErc20Escrow({
+  tokenAddress,
+  netAmount: oneTokenInBaseUnits,
+  buyerAddress,
+  sellerAddress,
+  obligationDeadlineUnixSec: obligationDeadline,
+  settlementDeadlineUnixSec: 0n,
+  termsHash: KlescrowTxBuilder.termsHashFromUri('https://example.com/orders/123/terms'),
+});
 
-// ─── Step 2: Approve the token spend ─────────────────────────────────────────
+console.log({ escrowId, predictedAddress, gross, fee });
+console.log(approveTx.preview);
+console.log(createTx.preview);
+```
 
-await signer.sendTransaction({ ...approveTx, value: BigInt(approveTx.value) });
+`netAmount` is the amount the seller receives. `gross` is `netAmount + protocol fee`; it is the amount approved for transfer.
 
-// ─── Step 3: Create the escrow contract ──────────────────────────────────────
+## Send the Transactions
 
-await signer.sendTransaction({ ...createTx, value: BigInt(createTx.value) });
-// → Contract deployed at predictedAddress.
+Send approval first:
 
-// ─── Step 4: Deposit ─────────────────────────────────────────────────────────
+```ts
+await signer.sendTransaction({
+  to: approveTx.to,
+  data: approveTx.data,
+  value: BigInt(approveTx.value),
+});
+```
 
-const escrow           = klescrow.escrow(predictedAddress);
+Then create the escrow:
+
+```ts
+await signer.sendTransaction({
+  to: createTx.to,
+  data: createTx.data,
+  value: BigInt(createTx.value),
+});
+```
+
+After creation, bind the predicted escrow address and deposit:
+
+```ts
+const escrow = klescrow.escrow(predictedAddress);
 const { tx: depositTx } = await escrow.prepareDeposit();
 
-await signer.sendTransaction({ ...depositTx, value: BigInt(depositTx.value) });
-// → Funds locked.
-
-// ─── Step 5: Resolve ─────────────────────────────────────────────────────────
-
-//   await sellerSigner.sendTransaction(escrow.approvePayment());
-//   await signer.sendTransaction(escrow.approvePayment());
-// → Resolved.
+await signer.sendTransaction({
+  to: depositTx.to,
+  data: depositTx.data,
+  value: BigInt(depositTx.value),
+});
 ```
 
-## Key differences from ETH
+For ERC20 deposits, `depositTx.value` is `0`; the token movement happens through the token allowance.
+
+## Resolve or Dispute
+
+Happy-path release is the same as ETH:
+
+```ts
+const approvePaymentTx = escrow.approvePayment();
+await signer.sendTransaction({
+  to: approvePaymentTx.to,
+  data: approvePaymentTx.data,
+  value: BigInt(approvePaymentTx.value),
+});
+```
+
+If the parties disagree, raise a dispute:
+
+```ts
+const { tx: disputeTx } = await escrow.prepareRaiseDispute();
+await signer.sendTransaction({
+  to: disputeTx.to,
+  data: disputeTx.data,
+  value: BigInt(disputeTx.value),
+});
+```
+
+## Deadline Fields
+
+| Field | Meaning |
+| --- | --- |
+| `obligationDeadlineUnixSec` | Absolute Unix timestamp for the seller obligation deadline. |
+| `settlementDeadlineUnixSec` | Absolute Unix timestamp for settlement after deposit, or `0n` when no separate settlement deadline is needed. |
+
+Use Unix seconds, not JavaScript milliseconds.
+
+## ETH vs ERC20
 
 | ETH escrow | ERC20 escrow |
-|---|---|
-| `createEthEscrow` / `prepareCreateEthEscrow` | `createErc20Escrow` / `prepareCreateErc20Escrow` |
-| No approve step | Token approve step first |
-| Deposit value is gross amount | Deposit value is zero |
-| Escrow address found from logs | Escrow address predicted before creation |
+| --- | --- |
+| Use `prepareCreateEthEscrow()` | Use `prepareCreateErc20Escrow()` |
+| No token approval | Send `approveTx` first |
+| Native ETH value can appear in transaction `value` | Token amount moves through ERC20 allowance |
+| Escrow address can be read from logs | Escrow address is predicted before creation |
+| `depositTx.value` is the ETH gross amount | `depositTx.value` is `0` |
+
+## Common Mistakes
+
+| Mistake | Fix |
+| --- | --- |
+| Approving the factory address. | Approve `predictedAddress`, which `prepareCreateErc20Escrow()` already does. |
+| Passing token display units. | Pass base units, such as `1_000_000n` for 1 USDC with 6 decimals. |
+| Sending create before approval. | Send `approveTx`, wait for it to land, then send `createTx`. |
+| Using `expiryTimeUnixSec`. | Use `obligationDeadlineUnixSec` and `settlementDeadlineUnixSec`. |
+| Forgetting `BigInt(tx.value)`. | Convert the decimal string before passing it to ethers v6. |

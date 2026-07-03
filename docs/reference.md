@@ -1,163 +1,260 @@
-# Reference
+# API Reference
 
-Cheat sheet for every action, type, and common mistake.
+Compact reference for the public Klescrow npm surface.
 
-## States
+## Main Exports
 
 ```ts
-enum EscrowState { UNFUNDED, FUNDED, DISPUTED, RESOLVED, CANCELLED }
-enum EscrowIntent { NONE, APPROVE_PAYMENT, APPROVE_REFUND }
+import {
+  Klescrow,
+  KlescrowTxBuilder,
+  KlescrowEvents,
+  KlescrowTopics,
+  decodeKlescrowError,
+  EscrowState,
+  EscrowIntent,
+  IdGenerator,
+} from '@rakelabs/klescrow-sdk';
 ```
 
-## Factory actions
-
-| Method | Description | Who signs |
-|--------|-------------|:---------:|
-| `factory.readConfig()` | Read factory config (fee, arbitrator, etc.). | N/A (read) |
-| `factory.quoteGross(net)` | Quote gross = net + fee. | N/A (read) |
-| `factory.prepareCreateEthEscrow(params)` | Quote fee + build create tx in one call. | Creator |
-| `factory.prepareCreateErc20Escrow(params)` | Quote fee + build approve + create txs. | Creator |
-| `factory.createEthEscrow(params)` | Build create tx only (you supply fee). | Creator |
-| `factory.createErc20Escrow(params)` | Build create tx only (you supply fee). | Creator |
-| `factory.erc20Approve(params)` | Build ERC20 approve tx. | Buyer |
-| `factory.getLogsByParty(role, address)` | Query factory events by party. | N/A (read) |
-
-### Create params
+## State Enums
 
 ```ts
-{
-  escrowId:                    string;   // bytes32 hex (auto-generated if omitted)
-  buyerAddress?:               string;   // null = open slot
-  sellerAddress?:              string;   // null = open slot
-  tokenAddress?:               string;   // ERC20 only
-  amount:                      bigint;   // NET seller amount
-  fee:                         bigint;   // protocol fee
-  obligationDeadlineUnixSec:   bigint;   // absolute Unix timestamp
-  settlementDeadlineUnixSec:   bigint;   // 0 = same as obligation
-  termsHash:                   string;   // keccak256 of terms URI
+enum EscrowState {
+  UNFUNDED = 0,
+  FUNDED = 1,
+  DISPUTED = 2,
+  RESOLVED = 3,
+  CANCELLED = 4,
+}
+
+enum EscrowIntent {
+  NONE = 0,
+  APPROVE_PAYMENT = 1,
+  APPROVE_REFUND = 2,
 }
 ```
 
-## Escrow reads
+## Top-Level SDK
+
+| Method | Purpose |
+| --- | --- |
+| `Klescrow.fromProvider(provider, walletAddress?, implNameOrAddress?)` | Detect chain and default factory from provider. |
+| `Klescrow.forChain(chainId, provider, walletAddress?, impl?)` | Use the canonical factory address for a specific chain ID. |
+| `new Klescrow(config)` | Use explicit factory, chain, multicall, and implementation config. |
+| `klescrow.escrow(address)` | Return a bound escrow handle. No network call. |
+| `klescrow.termsHashFromUri(uri)` | Hash a terms URI into the bytes32 value expected on-chain. |
+
+## SDK Config
+
+```ts
+interface KlescrowSdkConfig {
+  chainId: number;
+  factoryAddress: string;
+  provider: AbstractProvider;
+  walletAddress?: string;
+  multicall?: { address: string };
+  impl?: { address: string; name: string };
+}
+```
+
+## Factory Reads
 
 | Method | Returns |
-|--------|---------|
-| `escrow.read()` | `EscrowInfo`, all on-chain state |
-| `escrow.arbitrationCost()` | `bigint`, current Kleros arbitration fee in wei |
-| `escrow.appealCost()` | `bigint`, current appeal fee (DISPUTED only) |
-| `escrow.appealPeriod()` | `{ start, end }`, appeal window (DISPUTED only) |
-| `escrow.pendingWithdrawal(address)` | `bigint`, ETH queued for pull-payment fallback |
-| `escrow.getEvidence(fromBlock, toBlock)` | `EscrowEvidenceEvent[]`, evidence log history |
-| `escrow.getLogs()` | `EscrowEvent[]`, all escrow events |
+| --- | --- |
+| `factory.readConfig()` | `FactoryInfo` |
+| `factory.quoteGross(net)` | `{ gross, fee }` |
+| `factory.feeBps()` | `bigint` |
+| `factory.implementationCount()` | `number` |
+| `factory.implementationAt(index)` | `{ address, name }` |
+| `factory.listImplementations()` | `{ address, name }[]` |
+| `factory.predictAddress(creator, req)` | Predicted clone address |
+| `factory.getLogs(from?, to?)` | `EscrowCreatedEvent[]` |
+| `factory.getLogsByParty(role, party, from?, to?)` | `EscrowCreatedEvent[]` |
+| `factory.getLogsByCreator(creator, from?, to?)` | `EscrowCreatedEvent[]` |
 
-### EscrowInfo fields
+## Factory Writes
+
+Prefer prepare helpers for app code.
+
+| Method | Description | Who signs |
+| --- | --- | --- |
+| `factory.prepareCreateEthEscrow(params)` | Quote fee and build ETH create transaction. | Creator |
+| `factory.prepareCreateErc20Escrow(params)` | Quote fee, predict clone, build ERC20 approve and create transactions. | Creator |
+| `factory.createEthEscrow(params)` | Build ETH create transaction when you already know fee values. | Creator |
+| `factory.createErc20Escrow(params)` | Build ERC20 create transaction when you already know fee values. | Creator |
+| `factory.erc20Approve(params)` | Build ERC20 approval transaction. | Token owner |
+
+### Prepare Create Params
 
 ```ts
-{
-  escrowAddress:             string;       // this clone's address
-  state:                     EscrowState;
-  buyer:                     string;       // may be 0x0 in invoice mode
-  seller:                    string;
-  creator:                   string;
-  token:                     string;       // 0x0 = ETH
-  amount:                    bigint;       // NET (seller receives this)
-  fee:                       bigint;       // platform fee
-  obligationDeadline:        bigint;       // Unix sec
-  settlementDeadline:        bigint;       // Unix sec
-  termsHash:                 string;       // bytes32 hex
-  disputeId:                 bigint;
-  buyerIntent:               EscrowIntent;
-  sellerIntent:              EscrowIntent;
-  proposedObligationDeadline: bigint;
-  arbitratorAddress:         string;
-  arbitratorConfiguration:   string;       // raw hex
+interface PrepareCreateParams {
+  netAmount: bigint;
+  escrowId?: string;
+  buyerAddress?: string | null;
+  sellerAddress?: string | null;
+  obligationDeadlineUnixSec: bigint;
+  settlementDeadlineUnixSec: bigint;
+  termsHash: string;
+}
+
+interface PrepareCreateErc20Params extends PrepareCreateParams {
+  tokenAddress: string;
 }
 ```
 
-## Escrow writes
+### Prepare Results
+
+```ts
+type PrepareCreateEthResult = {
+  tx: PreparedTx;
+  escrowId: string;
+  gross: bigint;
+  fee: bigint;
+};
+
+type PrepareCreateErc20Result = {
+  approveTx: PreparedTx;
+  createTx: PreparedTx;
+  escrowId: string;
+  gross: bigint;
+  fee: bigint;
+  predictedAddress: string;
+};
+```
+
+## Escrow Reads
+
+| Method | Returns |
+| --- | --- |
+| `escrow.read()` | `EscrowInfo` |
+| `escrow.arbitrationCost()` | Current Kleros arbitration fee |
+| `escrow.appealCost()` | Current appeal fee |
+| `escrow.appealPeriod()` | `{ start, end }` |
+| `escrow.pendingWithdrawal(address)` | Claimable ETH balance |
+| `escrow.getEvidence(from?, to?)` | Evidence events |
+| `escrow.getLogs(from?, to?)` | Decoded escrow events |
+
+## Escrow Writes
 
 | Method | Description |
-|--------|-------------|
-| `escrow.prepareDeposit()` | Read gross from chain + build deposit tx. |
-| `escrow.deposit(ethValue)` | Build deposit tx (you supply amount). |
-| `escrow.approvePayment()` | Build approve payment tx. |
-| `escrow.approveRefund()` | Build approve refund tx. |
-| `escrow.cancel()` | Build cancel tx. |
-| `escrow.join()` | Build join tx. |
-| `escrow.joinAsBuyer()` | Build join-as-buyer tx. |
-| `escrow.joinAsSeller()` | Build join-as-seller tx. |
-| `escrow.leave()` | Build leave tx. |
-| `escrow.removeParty(address)` | Build remove-party tx. |
-| `escrow.claim()` | Build claim tx. |
-| `escrow.extendExpiry(ts)` | Build extend-expiry tx. |
-| `escrow.updateTermsHash(hash)` | Build update-terms-hash tx. |
+| --- | --- |
+| `escrow.prepareDeposit()` | Read escrow amount and build deposit transaction. |
+| `escrow.deposit(ethValue)` | Build deposit transaction with caller-supplied ETH value. |
+| `escrow.approvePayment()` | Signal intent to release funds to seller. |
+| `escrow.approveRefund()` | Signal intent to refund buyer. |
+| `escrow.cancel()` | Cancel when allowed by contract state. |
+| `escrow.join()` | Join an open role. |
+| `escrow.joinAsBuyer()` | Join explicitly as buyer. |
+| `escrow.joinAsSeller()` | Join explicitly as seller. |
+| `escrow.leave()` | Leave before funding when allowed. |
+| `escrow.removeParty(address)` | Remove a party when allowed. |
+| `escrow.claim()` | Claim queued ETH withdrawal. |
+| `escrow.extendExpiry(timestamp)` | Propose or confirm a new obligation deadline. |
+| `escrow.updateTermsHash(hash)` | Update terms hash when allowed. |
+| `escrow.prepareRaiseDispute()` | Read arbitration fee and build dispute transaction. |
+| `escrow.raiseDispute(arbFeeWei)` | Build dispute transaction with caller-supplied fee. |
+| `escrow.submitEvidence(uri)` | Submit an evidence URI. |
+| `escrow.prepareAppeal(extraData?)` | Read appeal fee/window and build appeal transaction. |
+| `escrow.appeal(extraData, feeWei)` | Build appeal transaction with caller-supplied fee. |
 
-## Dispute writes
+## EscrowInfo
 
-| Method | Description |
-|--------|-------------|
-| `escrow.prepareRaiseDispute()` | Fetch arb fee + build dispute tx. |
-| `escrow.raiseDispute(arbFeeWei)` | Build dispute tx (you supply fee). |
-| `escrow.submitEvidence(uri)` | Build evidence submission tx. |
-| `escrow.prepareAppeal(extraData)` | Fetch appeal fee + window + build tx. |
-| `escrow.appeal(extraData, fee)` | Build appeal tx (you supply fee). |
+```ts
+interface EscrowInfo {
+  escrowAddress: string;
+  state: EscrowState;
+  buyer: string;
+  seller: string;
+  creator: string;
+  token: string;
+  amount: bigint;
+  fee: bigint;
+  obligationDeadline: bigint;
+  settlementDeadline: bigint;
+  termsHash: string;
+  disputeId: bigint;
+  buyerIntent: EscrowIntent;
+  sellerIntent: EscrowIntent;
+  proposedObligationDeadline: bigint;
+  arbitratorAddress: string;
+  arbitratorConfiguration: string;
+}
+```
 
 ## PreparedTx
 
-Every write method returns an unsigned transaction. You hand it to the wallet.
+Every write method returns an unsigned transaction request.
 
 ```ts
 interface PreparedTx {
-  to:          string;   // contract address
-  data:        string;   // ABI-encoded function call
-  value:       string;   // ETH to send (convert to BigInt!)
-  chainId:     number;
-  signerHint?: string;   // "buyer", "seller", "either party"
+  to: string;
+  data: string;
+  value: string;
+  chainId: number;
+  signerHint?: string;
+  preview?: SigningPreview;
 }
 ```
 
-### Sending it
+Send with ethers v6:
 
 ```ts
-const tx = escrow.deposit(gross);
-
-// ethers v6
 await signer.sendTransaction({
-  to:    tx.to,
-  data:  tx.data,
-  value: BigInt(tx.value),
-});
-
-// wagmi / viem
-await sendTransaction({
-  to:    tx.to   as `0x${string}`,
-  data:  tx.data as `0x${string}`,
+  to: tx.to,
+  data: tx.data,
   value: BigInt(tx.value),
 });
 ```
 
-## Common mistakes
+## Events
 
-### ❌ Not converting `tx.value` to BigInt
+Use facade helpers for common app flows. Use `KlescrowEvents` for raw logs.
 
-`PreparedTx.value` is a **decimal string**. ethers v6 requires `bigint`.
+Factory event:
 
 ```ts
-await signer.sendTransaction({ ...tx, value: BigInt(tx.value) }); // correct
+type EscrowCreatedEvent = {
+  escrowId: string;
+  escrowAddress: string;
+  creator: string;
+  seller: string;
+  buyer: string;
+  token: string;
+  amount: bigint;
+  fee: bigint;
+  obligationDeadline: bigint;
+  settlementDeadline: bigint;
+  termsHash: string;
+  logAddress: string;
+  transactionHash?: string;
+};
 ```
 
-### ❌ Calling `appealCost()` / `appealPeriod()` outside DISPUTED
+Escrow event union includes:
 
-These revert on-chain if the escrow is not DISPUTED. Check state first.
+- `funded`
+- `resolved`
+- `dispute_raised`
+- `cancelled`
+- `buyer_approved`
+- `seller_approved`
+- `expiry_extended`
+- `terms_hash_updated`
+- `evidence_submitted`
+- `buyer_joined`
+- `buyer_left`
+- `seller_joined`
+- `seller_left`
+- `expiry_extension_consented`
 
-### ❌ ERC20: approving the factory instead of the clone
+## Common Mistakes
 
-Token approval must go to the **escrow clone address**, not the factory. `prepareCreateErc20Escrow` handles this automatically.
-
-### ❌ Thinking `approvePayment` works with one party
-
-`approvePayment()` requires **both** buyer and seller. Neither can unilaterally release payment.
-
-### ❌ `extendExpiry` with one party
-
-Both must call with the **exact same** timestamp value.
+| Mistake | Fix |
+| --- | --- |
+| Passing `tx.value` directly to ethers v6. | Use `BigInt(tx.value)`. |
+| Approving the ERC20 factory instead of the predicted clone. | Use `prepareCreateErc20Escrow()` and send its `approveTx` first. |
+| Treating `escrowId` as the contract address. | Store the deployed `escrowAddress` from `EscrowCreated`. |
+| Calling appeal reads before a ruling exists. | Check state and `appealPeriod.end > 0n`. |
+| Expecting one party to release funds alone. | Both buyer and seller must express the same happy-path intent. |
+| Recomputing terms hashes differently across systems. | Use `KlescrowTxBuilder.termsHashFromUri(uri)` consistently. |
