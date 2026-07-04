@@ -41,9 +41,7 @@
     "build": "tsc",
     "regenerate": "npm run typechain && node scripts/patch-typechain.mjs",
     "prepack": "npm run build",
-    "test": "npm run build && node --test dist/test/*.test.js",
-    "test:e2e": "npm run build && node --import tsx/esm --test --test-concurrency=1 test/e2e/klescrow.e2e.test.ts test/e2e/klescrow-error-decoder.e2e.test.ts test/e2e/klescrow-txbuilder.e2e.test.ts test/e2e/klescrow-reader.e2e.test.ts test/e2e/klescrow-events.e2e.test.ts test/e2e/klescrow-golden.e2e.test.ts test/e2e/klescrow-multicall.e2e.test.ts",
-    "test:ci": "npm run build && node --test dist/test/*.test.js && node --import tsx/esm --test --test-concurrency=1 test/e2e/klescrow.e2e.test.ts test/e2e/klescrow-error-decoder.e2e.test.ts test/e2e/klescrow-txbuilder.e2e.test.ts test/e2e/klescrow-reader.e2e.test.ts test/e2e/klescrow-events.e2e.test.ts test/e2e/klescrow-golden.e2e.test.ts test/e2e/klescrow-multicall.e2e.test.ts && KLESCROW_E2E_DOCKER_IMAGE=cartel-hardhat:mock node --import tsx/esm --test --test-concurrency=1 test/e2e/klescrow-dispute.e2e.test.ts"
+    "test": "npm run build && tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js && node --import tsx/esm --test --test-concurrency=1 test/e2e/klescrow.e2e.test.ts test/e2e/klescrow-error-decoder.e2e.test.ts test/e2e/klescrow-txbuilder.e2e.test.ts test/e2e/klescrow-reader.e2e.test.ts test/e2e/klescrow-events.e2e.test.ts test/e2e/klescrow-golden.e2e.test.ts test/e2e/klescrow-multicall.e2e.test.ts && KLESCROW_E2E_DOCKER_IMAGE=cartel-hardhat:mock node --import tsx/esm --test --test-concurrency=1 test/e2e/klescrow-dispute.e2e.test.ts"
   },
   "dependencies": {
     "ethers": "^6.17.0"
