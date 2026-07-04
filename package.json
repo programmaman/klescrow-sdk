@@ -3,7 +3,7 @@
   "version": "0.1.2",
   "private": false,
   "description": "npm SDK for Klescrow escrow workflows",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "sideEffects": false,
   "repository": {
     "type": "git",
