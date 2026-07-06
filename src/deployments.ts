@@ -1,11 +1,8 @@
 /** Canonical Klescrow factory address. */
-export const MAINNET = '0xb381fB8e049C00B612fd060527dE0093DA1d6728';
-export const FACTORY_ADDRESS = MAINNET;
+export const FACTORY_ADDRESS = '0xb381fB8e049C00B612fd060527dE0093DA1d6728';
 
-/**
- * Backwards-compatible alias for the canonical factory address.
- */
-export const DEFAULT_FACTORY_ADDRESS = FACTORY_ADDRESS;
+export const SUPPORTED_CHAIN_IDS = [1, 100, 1337] as const;
+const SUPPORTED_CHAIN_ID_SET = new Set<number>(SUPPORTED_CHAIN_IDS);
 
 /**
  * Chain-specific overrides for exceptional deployments.
@@ -16,17 +13,29 @@ export const DEFAULT_FACTORY_ADDRESS = FACTORY_ADDRESS;
  */
 const CHAIN_FACTORY_OVERRIDES: ReadonlyMap<number, string> = new Map([]);
 
+/** Returns true when this SDK has a first-class deployment for the chain. */
+export function isSupportedChainId(chainId: number): boolean {
+    return SUPPORTED_CHAIN_ID_SET.has(chainId);
+}
+
 /**
  * Looks up the factory address for a given chain ID.
  *
- * @returns the chain override when present, otherwise the default replayed address.
+ * Returns undefined for unsupported chain IDs unless an explicit override exists.
  */
 export function getFactoryAddress(chainId: number): string | undefined {
     if (!Number.isSafeInteger(chainId) || chainId <= 0) {
         return undefined;
     }
 
-    return CHAIN_FACTORY_OVERRIDES.get(chainId) ?? FACTORY_ADDRESS;
+    return CHAIN_FACTORY_OVERRIDES.get(chainId) ?? (isSupportedChainId(chainId) ? FACTORY_ADDRESS : undefined);
+}
+
+/** Throws if the chain is not one this SDK supports out of the box. */
+export function requireSupportedChainId(chainId: number): void {
+    if (!isSupportedChainId(chainId)) {
+        throw new Error(`Unsupported chain ID: ${chainId}`);
+    }
 }
 
 /**

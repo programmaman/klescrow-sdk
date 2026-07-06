@@ -22,7 +22,7 @@ import { KlescrowEvents, TOPIC_ESCROW_CREATED } from './KlescrowEvents.js';
 import { Escrow } from './Escrow.js';
 import { requireAddress, IdGenerator } from './common/index.js';
 import type { MulticallConfig } from './multicall.js';
-import { FACTORY_ADDRESS, getFactoryAddress } from './deployments.js';
+import { getFactoryAddress, requireSupportedChainId } from './deployments.js';
 
 // ─── SDK config ───────────────────────────────────────────────────────────────
 
@@ -421,7 +421,16 @@ export class Klescrow {
     private readonly _impl?:    string;
     constructor(config: KlescrowSdkConfig) {
         const chainId = Klescrow._normalizeChainId(config.chainId);
-        const factoryAddress = config.factoryAddress ?? getFactoryAddress(chainId) ?? FACTORY_ADDRESS;
+
+        if (!config.factoryAddress) {
+            requireSupportedChainId(chainId);
+        }
+
+        const factoryAddress = config.factoryAddress ?? getFactoryAddress(chainId);
+        if (!factoryAddress) {
+            throw new Error(`Unsupported chain ID: ${chainId}`);
+        }
+
         requireAddress(factoryAddress, 'factoryAddress');
         this._cfg      = { chainId, factoryAddress };
         this._provider = config.provider;
@@ -504,7 +513,10 @@ export class Klescrow {
     ): Promise<Klescrow> {
         const { chainId } = await provider.getNetwork();
         const chainIdNumber = Klescrow._normalizeChainId(Number(chainId));
-        const factoryAddress = FACTORY_ADDRESS;
+        const factoryAddress = getFactoryAddress(chainIdNumber);
+        if (!factoryAddress) {
+            throw new Error(`Unsupported chain ID: ${chainIdNumber}`);
+        }
 
         let impl: EscrowImplementationInfo | undefined;
         if (implNameOrAddress) {
