@@ -1,7 +1,6 @@
 import type { AbstractProvider } from 'ethers';
 import type { PreparedTx } from './common/index.js';
 import type {
-    EscrowInfo,
     AppealPeriod,
     EscrowEvent,
     EscrowEvidenceEvent,
@@ -10,6 +9,7 @@ import type {
     PrepareAppealResult,
 } from './types.js';
 import type { KlescrowConfig } from './KlescrowTxBuilder.js';
+import type { EscrowReadable } from './internal/EscrowReadable.js';
 import { KlescrowReader } from './KlescrowReader.js';
 import { KlescrowTxBuilder } from './KlescrowTxBuilder.js';
 import { KlescrowEvents, TOPIC_EVIDENCE } from './KlescrowEvents.js';
@@ -28,6 +28,8 @@ import { ZeroAddress } from 'ethers';
  * in every `PreparedTx` automatically, so callers never have to pass it manually.
  */
 export class Escrow {
+    readonly read: EscrowReadable<[]>;
+
     constructor(
         /** On-chain address of this Klescrow clone. */
         readonly address: string,
@@ -37,15 +39,40 @@ export class Escrow {
         private readonly decoder:  KlescrowEvents,
         private readonly provider: AbstractProvider,
         private readonly walletAddress?: string,
-    ) {}
+    ) {
+        this.read = Object.assign(
+            () => this.reader.readEscrow(this.address),
+            {
+                state: () => this.reader.readEscrow.state(this.address),
+                buyer: () => this.reader.readEscrow.buyer(this.address),
+                seller: () => this.reader.readEscrow.seller(this.address),
+                creator: () => this.reader.readEscrow.creator(this.address),
+                token: () => this.reader.readEscrow.token(this.address),
+                amount: () => this.reader.readEscrow.amount(this.address),
+                fee: () => this.reader.readEscrow.fee(this.address),
+                obligationDeadline: () => this.reader.readEscrow.obligationDeadline(this.address),
+                settlementDeadline: () => this.reader.readEscrow.settlementDeadline(this.address),
+                termsHash: () => this.reader.readEscrow.termsHash(this.address),
+                disputeId: () => this.reader.readEscrow.disputeId(this.address),
+                buyerIntent: () => this.reader.readEscrow.buyerIntent(this.address),
+                sellerIntent: () => this.reader.readEscrow.sellerIntent(this.address),
+                proposedObligationDeadline: () =>
+                    this.reader.readEscrow.proposedObligationDeadline(this.address),
+                arbitrator: () => this.reader.readEscrow.arbitrator(this.address),
+                arbitratorConfiguration: () =>
+                    this.reader.readEscrow.arbitratorConfiguration(this.address),
+                arbitrationCost: () => this.reader.readEscrow.arbitrationCost(this.address),
+                appealCost: () => this.reader.readEscrow.appealCost(this.address),
+                appealPeriod: () => this.reader.readEscrow.appealPeriod(this.address),
+                pendingWithdrawal: (wallet: string) =>
+                    this.reader.readEscrow.pendingWithdrawal(this.address, wallet),
+            },
+        );
+    }
 
     // ─── Reads (async, no wallet required) ────────────────────────────────────
 
     /** Reads all on-chain state for this escrow. */
-    read(): Promise<EscrowInfo> {
-        return this.reader.readEscrow(this.address);
-    }
-
     /** Current Kleros arbitration cost in wei (from the escrow's snapshotted arbitrator). */
     arbitrationCost(): Promise<bigint> {
         return this.reader.readArbitrationCost(this.address);

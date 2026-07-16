@@ -128,6 +128,26 @@ type PrepareCreateErc20Result = {
 | Method | Returns |
 | --- | --- |
 | `escrow.read()` | `EscrowInfo` |
+| `escrow.read.state()` | `EscrowState` |
+| `escrow.read.buyer()` | Buyer address |
+| `escrow.read.seller()` | Seller address |
+| `escrow.read.creator()` | Creator address |
+| `escrow.read.token()` | Token address |
+| `escrow.read.amount()` | Net amount as `bigint` |
+| `escrow.read.fee()` | Protocol fee as `bigint` |
+| `escrow.read.obligationDeadline()` | Obligation deadline as `bigint` |
+| `escrow.read.settlementDeadline()` | Settlement deadline as `bigint` |
+| `escrow.read.termsHash()` | Terms hash hex |
+| `escrow.read.disputeId()` | Dispute ID as `bigint` |
+| `escrow.read.buyerIntent()` | `EscrowIntent` |
+| `escrow.read.sellerIntent()` | `EscrowIntent` |
+| `escrow.read.proposedObligationDeadline()` | Proposed deadline as `bigint` |
+| `escrow.read.arbitrator()` | Arbitrator address |
+| `escrow.read.arbitratorConfiguration()` | Arbitrator configuration hex |
+| `escrow.read.arbitrationCost()` | Current Kleros arbitration fee |
+| `escrow.read.appealCost()` | Current appeal fee |
+| `escrow.read.appealPeriod()` | `{ start, end }` |
+| `escrow.read.pendingWithdrawal(wallet)` | Claimable ETH balance |
 | `escrow.arbitrationCost()` | Current Kleros arbitration fee |
 | `escrow.appealCost()` | Current appeal fee |
 | `escrow.appealPeriod()` | `{ start, end }` |

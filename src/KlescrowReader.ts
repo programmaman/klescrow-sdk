@@ -13,6 +13,7 @@ import {
 } from './types.js';
 import { KlescrowFactory__factory, Klescrow__factory } from '../generated/typechain/index.js';
 import { type MulticallConfig, type EncodedReadCall, executeMulticall } from './multicall.js';
+import type { EscrowReadable } from './internal/EscrowReadable.js';
 
 // ─── KlescrowReader ────────────────────────────────────────────────────────────
 
@@ -27,9 +28,38 @@ import { type MulticallConfig, type EncodedReadCall, executeMulticall } from './
  */
 export class KlescrowReader {
     private readonly _multicall?: MulticallConfig;
+    readonly readEscrow: EscrowReadable<[escrowAddress: string]>;
 
     constructor(private readonly provider: AbstractProvider, multicallConfig?: MulticallConfig) {
         this._multicall = multicallConfig;
+        this.readEscrow = Object.assign(
+            (escrowAddress: string) => this._readEscrowSnapshot(escrowAddress),
+            {
+                state: (escrowAddress: string) => this._readEscrowState(escrowAddress),
+                buyer: (escrowAddress: string) => this._readEscrowString(escrowAddress, 'buyer'),
+                seller: (escrowAddress: string) => this._readEscrowString(escrowAddress, 'seller'),
+                creator: (escrowAddress: string) => this._readEscrowString(escrowAddress, 'creator'),
+                token: (escrowAddress: string) => this._readEscrowString(escrowAddress, 'token'),
+                amount: (escrowAddress: string) => this._readEscrowBigInt(escrowAddress, 'amount'),
+                fee: (escrowAddress: string) => this._readEscrowBigInt(escrowAddress, 'fee'),
+                obligationDeadline: (escrowAddress: string) => this._readEscrowBigInt(escrowAddress, 'obligationDeadline'),
+                settlementDeadline: (escrowAddress: string) => this._readEscrowBigInt(escrowAddress, 'settlementDeadline'),
+                termsHash: (escrowAddress: string) => this._readEscrowString(escrowAddress, 'termsHash'),
+                disputeId: (escrowAddress: string) => this._readEscrowBigInt(escrowAddress, 'disputeId'),
+                buyerIntent: (escrowAddress: string) => this._readEscrowIntent(escrowAddress, 'buyerIntent'),
+                sellerIntent: (escrowAddress: string) => this._readEscrowIntent(escrowAddress, 'sellerIntent'),
+                proposedObligationDeadline: (escrowAddress: string) =>
+                    this._readEscrowBigInt(escrowAddress, 'proposedObligationDeadline'),
+                arbitrator: (escrowAddress: string) => this._readEscrowString(escrowAddress, 'arbitrator'),
+                arbitratorConfiguration: (escrowAddress: string) =>
+                    this._readEscrowString(escrowAddress, 'arbitratorConfiguration'),
+                arbitrationCost: (escrowAddress: string) => this.readArbitrationCost(escrowAddress),
+                appealCost: (escrowAddress: string) => this.readAppealCost(escrowAddress),
+                appealPeriod: (escrowAddress: string) => this.readAppealPeriod(escrowAddress),
+                pendingWithdrawal: (escrowAddress: string, wallet: string) =>
+                    this.readPendingWithdrawal(escrowAddress, wallet),
+            },
+        );
     }
 
     // ─── Factory reads ────────────────────────────────────────────────────────
@@ -198,7 +228,7 @@ export class KlescrowReader {
     /**
      * Reads all on-chain state for a deployed escrow clone.
      */
-    async readEscrow(escrowAddress: string): Promise<EscrowInfo> {
+    private async _readEscrowSnapshot(escrowAddress: string): Promise<EscrowInfo> {
         const addr = requireAddress(escrowAddress, 'escrowAddress');
         return this._multicall
             ? this._readEscrowViaMulticall(addr)
@@ -295,6 +325,36 @@ export class KlescrowReader {
             arbitratorAddress:          arbitratorAddress as string,
             arbitratorConfiguration:    arbitratorConfiguration as string,
         };
+    }
+
+    private _escrow(escrowAddress: string) {
+        return Klescrow__factory.connect(
+            requireAddress(escrowAddress, 'escrowAddress'),
+            this.provider,
+        );
+    }
+
+    private async _readEscrowState(escrowAddress: string): Promise<EscrowState> {
+        return escrowStateFromOrdinal(Number(await this._escrow(escrowAddress).state()));
+    }
+
+    private async _readEscrowString(escrowAddress: string, method:
+        'buyer' | 'seller' | 'creator' | 'token' | 'termsHash' | 'arbitrator' | 'arbitratorConfiguration',
+    ): Promise<string> {
+        const escrow = this._escrow(escrowAddress);
+        return await escrow[method]() as string;
+    }
+
+    private async _readEscrowBigInt(escrowAddress: string, method:
+        'amount' | 'fee' | 'obligationDeadline' | 'settlementDeadline' | 'disputeId' | 'proposedObligationDeadline',
+    ): Promise<bigint> {
+        const escrow = this._escrow(escrowAddress);
+        return await escrow[method]() as bigint;
+    }
+
+    private async _readEscrowIntent(escrowAddress: string, method: 'buyerIntent' | 'sellerIntent'): Promise<EscrowIntent> {
+        const escrow = this._escrow(escrowAddress);
+        return escrowIntentFromOrdinal(Number(await escrow[method]()));
     }
 
     // ─── Single-call escrow reads ─────────────────────────────────────────────
