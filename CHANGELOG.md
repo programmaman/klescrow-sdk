@@ -4,6 +4,8 @@ All notable public changes to `@rakelabs/klescrow-sdk` are documented here.
 
 ## Unreleased
 
+## 0.1.4
+
 ### Added
 
 - Added convenient individual read methods for escrow status, parties, terms, disputes, and arbitration information.
