@@ -24,58 +24,47 @@ import type { MulticallConfig } from './multicall.js';
 import { getFactoryAddress, requireSupportedChainId } from './deployments.js';
 import { decodeRpcChainId, ethGetLogs } from './internal/rpc.js';
 
-// ─── SDK config ───────────────────────────────────────────────────────────────
+// SDK configuration
 
 export interface KlescrowSdkConfig {
+    /** EVM chain ID used for reads and prepared transactions. */
     chainId: number;
-    /** Defaults to the replayed Klescrow factory address. */
+    /** Factory address; defaults to the canonical deployment for `chainId`. */
     factoryAddress?: string;
+    /** Application-supplied read-only JSON-RPC capability. */
     rpcClient: RpcClient;
+    /** Application-supplied ABI encoder/decoder. */
     codec: AbiCodec;
+    /** Block context for reads; defaults to `latest`. */
     readBlock?: ReadBlockReference;
-    /**
-     * Current user's wallet address.
-     * When set, all write operations pre-fill `callerWallet` automatically.
-     * Can still be overridden per-call.
-     */
+    /** Default wallet for writes; can be overridden per call. */
     walletAddress?: string;
-    /**
-     * Optional Multicall3 configuration.
-     * When set, `readEscrow` and `readFactory` batch all their eth_calls into a
-     * single `aggregate3` request, reducing RPC round-trips significantly.
-     *
-     * The canonical Multicall3 address on most EVM chains is:
-     * `0xcA11bde05977b3631167028862bE2a173976CA11`
-     *
-     * Omit to keep the default parallel-Promise.all behaviour.
-     */
+    /** Optional Multicall3 configuration for batched reads. */
     multicall?: MulticallConfig;
-    /**
-     * Optional escrow implementation to pin.
-     *
-     * Omit (or set undefined) to use the factory's live default.
-     *
-     * Set to an {@link EscrowImplementationInfo} from {@link FactoryHandle.listImplementations}
-     * to pin a specific implementation for all create and predict calls on this SDK instance.
-     */
+    /** Optional implementation to pin for create and predict calls. */
     impl?: EscrowImplementationInfo;
 }
 
+/** Options for {@link Klescrow.fromRpc}. */
 export interface KlescrowFromRpcOptions {
+    /** ABI encoder/decoder used by the SDK. */
     readonly codec: AbiCodec;
+    /** Optional factory override. */
     readonly factoryAddress?: string;
+    /** Optional default wallet for writes. */
     readonly walletAddress?: string;
+    /** Optional block context for reads. */
     readonly readBlock?: ReadBlockReference;
+    /** Optional Multicall3 configuration. */
     readonly multicall?: MulticallConfig;
+    /** Optional implementation name or address to pin. */
     readonly implNameOrAddress?: string;
 }
 
-// ─── FactoryHandle ─────────────────────────────────────────────────────────────
+// Factory handle
 
 /**
- * Factory-level namespace. Access via `klescrow.factory`.
- *
- * Read methods are async (eth_call). Write methods return unsigned `PreparedTx`.
+ * Factory-level reads and transaction builders, exposed as `klescrow.factory`.
  */
 export class FactoryHandle {
     constructor(
@@ -88,9 +77,9 @@ export class FactoryHandle {
         private readonly impl?:        string,
     ) {}
 
-    // ─── Reads ─────────────────────────────────────────────────────────────
+    // Reads
 
-    /** Full on-chain factory configuration (fees, arbitrator, owner, …). */
+    /** Reads the complete on-chain factory configuration. */
     readConfig(): Promise<FactoryInfo> {
         return this.reader.readFactory(this.cfg.factoryAddress);
     }
@@ -103,24 +92,23 @@ export class FactoryHandle {
         return this.reader.quoteGross(this.cfg.factoryAddress, net);
     }
 
-    /** Current protocol fee in basis points (10 000 = 100 %). */
+    /** Reads the protocol fee in basis points (`10_000` = 100%). */
     feeBps(): Promise<bigint> {
         return this.reader.readFeeBps(this.cfg.factoryAddress);
     }
 
-    /** Number of registered escrow implementation contracts. */
+    /** Reads the number of registered escrow implementations. */
     implementationCount(): Promise<number> {
         return this.reader.readImplementationCount(this.cfg.factoryAddress);
     }
 
-    /** Implementation address + name at `index` (0-based). */
+    /** Reads an implementation by zero-based index. */
     implementationAt(index: number): Promise<EscrowImplementationInfo> {
         return this.reader.readImplementationAt(this.cfg.factoryAddress, index);
     }
 
     /**
-     * Calls `predictEscrowAddress` on-chain and returns the deterministic clone address.
-     * Pass the wallet/creator that will submit `createEscrow(...)`.
+     * Predicts the deterministic clone address for a creator and escrow request.
      */
     predictAddress(creator: string, req: {
         id: string;
@@ -137,18 +125,14 @@ export class FactoryHandle {
     }
 
     /**
-     * Hashes a terms URI into the bytes32 value expected by createEscrow.
-     * Convenience passthrough to the low-level tx builder helper.
+     * Hashes a terms URI into the bytes32 value expected by `createEscrow`.
      */
     termsHashFromUri(uri: string): string {
         return KlescrowTxBuilder.termsHashFromUri(uri);
     }
 
     /**
-     * Reads all registered escrow implementations from the factory.
-     *
-     * Returns an ordered list of `{ address, name }` pairs suitable for
-     * passing to {@link KlescrowSdkConfig.impl} or {@link Klescrow.fromRpc}.
+     * Reads all registered escrow implementations in factory order.
      */
     async listImplementations(): Promise<EscrowImplementationInfo[]> {
         const count = await this.reader.readImplementationCount(this.cfg.factoryAddress);
@@ -158,10 +142,10 @@ export class FactoryHandle {
         );
     }
 
-    // ─── Writes ────────────────────────────────────────────────────────────
+    // Writes
 
     /**
-     * Build an unsigned `createEscrow` transaction for a native-ETH-funded escrow.
+     * Builds an unsigned ETH-funded `createEscrow` transaction.
      */
     createEthEscrow(p: Omit<CreateEscrowParams, 'callerWallet'>, wallet?: string): PreparedTx {
         return this.builder.createEthEscrow(this.cfg, {
@@ -172,7 +156,7 @@ export class FactoryHandle {
     }
 
     /**
-     * Build an unsigned `createEscrow` transaction for an ERC20-funded escrow.
+     * Builds an unsigned ERC20-funded `createEscrow` transaction.
      */
     createErc20Escrow(p: Omit<CreateEscrowParams, 'callerWallet'>, wallet?: string): PreparedTx {
         return this.builder.createErc20Escrow(this.cfg, {
@@ -183,7 +167,7 @@ export class FactoryHandle {
     }
 
     /**
-     * Build an ERC20 `approve(spender, amount)` transaction.
+     * Builds an ERC20 approval transaction for an escrow deposit.
      */
     erc20Approve(p: Omit<Erc20ApproveParams, 'ownerWallet'>, wallet?: string): PreparedTx {
         return this.builder.erc20ApproveDeposit(this.cfg, {
@@ -192,29 +176,9 @@ export class FactoryHandle {
         });
     }
 
-    // ─── Prepare helpers (read + build in one call) ───────────────────────────
+    // Read-and-build helpers
 
-    /**
-     * Quotes the protocol fee, then builds the `createEscrow` transaction.
-     *
-     * Pass `netAmount` — gross and fee are computed automatically.
-     * `escrowId` is auto-generated (cryptographically random bytes32) if omitted.
-     *
-     * Eliminates the manual quote → create pattern:
-     * ```ts
-     * // Before
-     * const { gross, fee } = await klescrow.factory.quoteGross(net);
-     * const tx = klescrow.factory.createEthEscrow({ escrowId, amount: gross, fee, … });
-     *
-     * // After
-     * const { tx, escrowId, gross, fee } = await klescrow.factory.prepareCreateEthEscrow({
-     *   netAmount: 1_000_000n,
-     *   sellerAddress: '0xSELLER…',
-     *   obligationDeadlineUnixSec: BigInt(Math.floor(Date.now() / 1000) + 7 * 86400),
-     *   termsHash: KlescrowTxBuilder.termsHashFromUri('ipfs://Qm…'),
-     * });
-     * ```
-     */
+    /** Quotes the fee and builds an unsigned ETH create transaction. */
     async prepareCreateEthEscrow(
         params: Omit<PrepareCreateParams, 'callerWallet'>,
         wallet?: string,
@@ -237,30 +201,8 @@ export class FactoryHandle {
     }
 
     /**
-     * Quotes the protocol fee, predicts the clone address, then builds both the
-     * ERC20 `approve` and `createEscrow` transactions.
-     *
-     * **Send `approveTx` first**, then `createTx`.
-     *
-     * Eliminates the manual quote → predictAddress → approve → create pattern:
-     * ```ts
-     * // Before
-     * const { gross, fee } = await klescrow.factory.quoteGross(net);
-     * const predicted = await klescrow.factory.predictAddress(wallet.address, { … });
-     * const approveTx = klescrow.factory.erc20Approve({ spenderAddress: predicted, … });
-     * const createTx  = klescrow.factory.createErc20Escrow({ amount: gross, fee, … });
-     *
-     * // After
-     * const { approveTx, createTx, escrowId, gross, predictedAddress } =
-     *   await klescrow.factory.prepareCreateErc20Escrow({
-     *     tokenAddress: '0xTOKEN…',
-     *     netAmount:    1_000_000n,
-     *     buyerAddress: '0xBUYER…',
-     *     …
-     *   });
-     * await signer.sendTransaction({ ...approveTx, value: BigInt(approveTx.value) });
-     * await signer.sendTransaction({ ...createTx,  value: BigInt(createTx.value)  });
-     * ```
+     * Quotes the fee, predicts the clone, and builds the approval and create
+     * transactions. Send `approveTx` before `createTx`.
      */
     async prepareCreateErc20Escrow(
         params: Omit<PrepareCreateErc20Params, 'callerWallet'>,
@@ -306,10 +248,10 @@ export class FactoryHandle {
         return { createTx, approveTx, escrowId, gross, fee, predictedAddress };
     }
 
-    // ─── Event history ─────────────────────────────────────────────────────
+    // Event history
 
     /**
-     * Fetches all `EscrowCreated` events emitted by this factory.
+     * Fetches decoded `EscrowCreated` events emitted by this factory.
      *
      * @param fromBlock  First block to scan (default: 0).
      * @param toBlock    Last block to scan (default: 'latest').
@@ -337,6 +279,7 @@ export class FactoryHandle {
         });
     }
 
+    /** Fetches creation events filtered by buyer or seller. */
     async getLogsByParty(
         role:       'buyer' | 'seller',
         party:      string,
@@ -350,6 +293,7 @@ export class FactoryHandle {
             : requireAddress(e.buyer, 'buyer') === normalized);
     }
 
+    /** Fetches creation events filtered by the factory creator. */
     async getLogsByCreator(
         creator:     string,
         fromBlock:   number | 'earliest' = 0,
@@ -375,7 +319,7 @@ export class FactoryHandle {
         });
     }
 
-    // ─── Internals ─────────────────────────────────────────────────────────
+    // Internals
 
     private resolveWallet(override?: string): string {
         const w = override ?? this.walletAddress;
@@ -386,41 +330,11 @@ export class FactoryHandle {
     }
 }
 
-// ─── Klescrow ─────────────────────────────────────────────────────────────────
+// Klescrow SDK
 
-/**
- * Top-level entry point for the Klescrow SDK.
- *
- * Zero-config usage (auto-detects chain + factory from the wallet):
- * ```ts
- * const klescrow = await Klescrow.fromRpc(rpcClient, { codec });
- * ```
- *
- * Explicit config (for custom chains or factory addresses):
- * ```ts
- * const klescrow = new Klescrow({
- *   chainId:        1,
- *   factoryAddress: '0x…',
- *   rpcClient,
- *   codec,
- *   walletAddress:  '0x…',   // optional — fills callerWallet on all write ops
- *   impl:           { address: '0x…', name: 'Klescrow Single-Party' },  // optional
- * });
- *
- * // Factory-level operations
- * const info     = await klescrow.factory.readConfig();
- * const quote    = await klescrow.factory.quoteGross(1_000_000n);
- * const createTx = klescrow.factory.createEthEscrow(params);
- *
- * // Bound escrow — no network call
- * const escrow     = klescrow.escrow('0x…');
- * const state      = await escrow.read();
- * const approveTx  = escrow.approvePayment();
- * const history    = await escrow.getLogs();
- * ```
- */
+/** Top-level entry point for Klescrow reads and unsigned transaction builders. */
 export class Klescrow {
-    /** Factory-level operations (reads + create tx). */
+    /** Factory-level reads and transaction builders. */
     readonly factory: FactoryHandle;
 
     private readonly _reader:   KlescrowReader;
@@ -430,6 +344,8 @@ export class Klescrow {
     private readonly _rpcClient: RpcClient;
     private readonly _wallet?:  string;
     private readonly _impl?:    string;
+
+    /** Creates an instance from explicit chain and deployment configuration. */
     constructor(config: KlescrowSdkConfig) {
         const chainId = Klescrow._normalizeChainId(config.chainId);
 
@@ -459,27 +375,7 @@ export class Klescrow {
         );
     }
 
-    /**
-     * Creates a `Klescrow` instance using the replayed factory address for the given chain ID.
-     *
-     * Convenience equivalent to:
-     * ```ts
-     * return new Klescrow({
-     *   chainId,
-     *   factoryAddress: FACTORY_ADDRESS,
-     *   rpcClient,
-     *   codec,
-     *   walletAddress,
-     *   impl,
-     * });
-     * ```
-     *
-     * @param chainId Any positive integer chain ID.
-     * @param rpcClient The JSON-RPC capability supplied by the application.
-     * @param walletAddress The address of the wallet to use for interacting with the escrow.
-     * @param impl Optional escrow implementation. Omit to use the factory's live default.
-     * @throws if `chainId` is not a positive safe integer.
-     */
+    /** Creates an instance using the canonical factory for `chainId`. */
     static forChain(
         chainId: number,
         rpcClient: RpcClient,
@@ -491,31 +387,11 @@ export class Klescrow {
     }
 
     /**
-     * Creates a `Klescrow` instance by auto-detecting the chain through JSON-RPC
-     * and using the canonical replayed factory address.
+     * Creates an instance by discovering the chain through JSON-RPC.
      *
-     * This is the **recommended** entry point — zero config:
-     * ```ts
-     * const klescrow = await Klescrow.fromRpc(rpcClient, { codec });
-     * ```
-     *
-     * With optional wallet address (auto-fills callerWallet on write ops):
-     * ```ts
-     * const klescrow = await Klescrow.fromRpc(rpcClient, { codec, walletAddress });
-     * ```
-     *
-     * With a specific escrow implementation by name or address:
-     * ```ts
-     * const klescrow = await Klescrow.fromRpc(
-     *     rpcClient, { codec, walletAddress, implNameOrAddress: 'Klescrow Single-Party' });
-     * ```
-     *
-     * @param rpcClient         An application-supplied RpcClient.
-     * @param walletAddress     Optional — when set, all write ops pre-fill `callerWallet`.
-     * @param implNameOrAddress Optional — name or address of a registered implementation.
-     *                          Omit to use the factory's live default.
-     * @throws if JSON-RPC returns an invalid chain ID.
-     * @throws if `implNameOrAddress` is a name that doesn't match any registered implementation.
+     * @param rpcClient Application-supplied read-only JSON-RPC capability.
+     * @param options ABI codec and optional deployment settings.
+     * @throws If the chain ID or selected implementation is invalid or unsupported.
      */
     static async fromRpc(
         rpcClient: RpcClient,
@@ -559,11 +435,11 @@ export class Klescrow {
         factoryAddress: string,
         nameOrAddress: string,
     ): Promise<EscrowImplementationInfo> {
-        // Address: validate and return directly
+        // An address can be used directly.
         if (nameOrAddress.startsWith('0x')) {
             return { address: requireAddress(nameOrAddress, 'impl'), name: '' };
         }
-        // Name: read factory, find match
+        // Otherwise resolve the name from the factory.
         const count  = await reader.readImplementationCount(factoryAddress);
         const impls  = await Promise.all(
             Array.from({ length: count }, (_, i) =>
@@ -577,11 +453,7 @@ export class Klescrow {
         return match;
     }
 
-    /**
-     * Returns an `Escrow` bound to the given deployed clone address.
-     *
-     * This is a **free, synchronous** operation — no network call is made.
-     */
+    /** Returns an escrow handle without making a network request. */
     escrow(address: string): Escrow {
         return new Escrow(
             requireAddress(address, 'escrowAddress'),
@@ -589,10 +461,7 @@ export class Klescrow {
         );
     }
 
-    /**
-     * Hashes a terms URI into the bytes32 value expected by createEscrow.
-     * Convenience passthrough for UI and integration flows.
-     */
+    /** Hashes a terms URI into the bytes32 value expected by `createEscrow`. */
     termsHashFromUri(uri: string): string {
         return this.factory.termsHashFromUri(uri);
     }

@@ -1,6 +1,6 @@
 import { requireAddress, ZERO_ADDRESS } from './common/index.js';
 import type { AbiCodec, Hex } from './common/AbiCodec.js';
-import type { ReadBlockReference, RpcClient } from './common/RpcClient.js';
+import type { ReadBlockReference, RpcClient } from './common/index.js';
 import { encodeRpcBlockReference, ethCall, type RpcBlockIdentifier } from './internal/rpc.js';
 import {
     type FactoryInfo,
