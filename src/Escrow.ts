@@ -1,5 +1,5 @@
-import type { AbstractProvider } from 'ethers';
 import type { PreparedTx } from './common/index.js';
+import type { RpcClient } from './common/index.js';
 import type {
     AppealPeriod,
     EscrowEvent,
@@ -13,7 +13,8 @@ import type { EscrowReadable } from './internal/EscrowReadable.js';
 import { KlescrowReader } from './KlescrowReader.js';
 import { KlescrowTxBuilder } from './KlescrowTxBuilder.js';
 import { KlescrowEvents, TOPIC_EVIDENCE } from './KlescrowEvents.js';
-import { ZeroAddress } from 'ethers';
+import { ZERO_ADDRESS as ZeroAddress } from './common/index.js';
+import { ethGetLogs } from './internal/rpc.js';
 
 /**
  * A handle bound to a specific deployed Klescrow clone.
@@ -37,7 +38,7 @@ export class Escrow {
         private readonly reader:   KlescrowReader,
         private readonly builder:  KlescrowTxBuilder,
         private readonly decoder:  KlescrowEvents,
-        private readonly provider: AbstractProvider,
+        private readonly rpcClient: RpcClient,
         private readonly walletAddress?: string,
     ) {
         this.read = Object.assign(
@@ -180,7 +181,7 @@ export class Escrow {
         fromBlock: number | 'earliest' = 0,
         toBlock:   number | 'latest'   = 'latest',
     ): Promise<EscrowEvidenceEvent[]> {
-        const rawLogs = await this.provider.getLogs({
+        const rawLogs = await ethGetLogs(this.rpcClient, {
             address:   this.address,
             topics:    [TOPIC_EVIDENCE],
             fromBlock,
@@ -334,7 +335,7 @@ export class Escrow {
         fromBlock: number | 'earliest' = 0,
         toBlock:   number | 'latest'   = 'latest',
     ): Promise<EscrowEvent[]> {
-        const rawLogs = await this.provider.getLogs({
+        const rawLogs = await ethGetLogs(this.rpcClient, {
             address:   this.address,
             fromBlock,
             toBlock,

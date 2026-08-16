@@ -20,6 +20,10 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
+    },
+    "./abi": {
+      "types": "./dist/src/abi.d.ts",
+      "default": "./dist/src/abi.js"
     }
   },
   "keywords": [
@@ -34,27 +38,24 @@
     "node": ">=20"
   },
   "scripts": {
-    "lint": "eslint src scripts",
-    "lint:fix": "eslint src scripts --fix",
-    "typechain": "typechain --target ethers-v6 --out-dir generated/typechain '../../../frontend/abi/Klescrow*.json'",
-    "posttypechain": "node scripts/patch-typechain.mjs",
-    "build": "tsc",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "clean": "node scripts/clean.mjs",
+    "build": "npm run clean && tsc",
     "typecheck": "tsc --noEmit",
-    "regenerate": "npm run typechain && node scripts/patch-typechain.mjs",
     "prepack": "npm run build",
     "pack:check": "npm pack --dry-run",
-    "test": "npm run build && tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js && node --import tsx/esm --test --test-concurrency=1 test/e2e/klescrow.e2e.test.ts test/e2e/klescrow-error-decoder.e2e.test.ts test/e2e/klescrow-txbuilder.e2e.test.ts test/e2e/klescrow-reader.e2e.test.ts test/e2e/klescrow-events.e2e.test.ts test/e2e/klescrow-golden.e2e.test.ts test/e2e/klescrow-multicall.e2e.test.ts && KLESCROW_E2E_DOCKER_IMAGE=cartel-hardhat:mock node --import tsx/esm --test --test-concurrency=1 test/e2e/klescrow-dispute.e2e.test.ts"
+    "test": "npm run build && tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js && node --import tsx/esm --test --test-concurrency=1 test/e2e/*.e2e.test.ts"
   },
   "dependencies": {
-    "ethers": "^6.17.0"
+    "@noble/hashes": "^1.3.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@typechain/ethers-v6": "^0.5.1",
     "@types/node": "^20.0.0",
     "eslint": "^10.5.0",
+    "ethers": "^6.17.0",
     "tsx": "^4.22.3",
-    "typechain": "^8.3.2",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.61.1"
   },
@@ -63,7 +64,6 @@
   },
   "files": [
     "dist/src",
-    "dist/generated",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"

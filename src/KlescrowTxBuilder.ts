@@ -1,7 +1,7 @@
-import { Interface, keccak256, toUtf8Bytes, ZeroAddress, getAddress } from 'ethers';
+import { keccak_256 } from '@noble/hashes/sha3';
 import type { PreparedTx } from './common/index.js';
 import { requireAddress, type SigningPreview, buildFeeBreakdown, formatUnixSec, ZERO_ADDRESS } from './common/index.js';
-import { KlescrowFactory__factory, Klescrow__factory } from '../generated/typechain/index.js';
+import type { AbiCodec } from './common/AbiCodec.js';
 
 // ─── Configuration ─────────────────────────────────────────────────────────────
 
@@ -89,12 +89,6 @@ export interface Erc20ApproveParams {
     amount: bigint;
 }
 
-// ─── ABI fragments ─────────────────────────────────────────────────────────────
-// ERC20 approve — not a Klescrow contract, kept as minimal inline fragment
-const ERC20_ABI = [
-    'function approve(address spender, uint256 amount) returns (bool)',
-];
-
 // ─── Builder ───────────────────────────────────────────────────────────────────
 
 /**
@@ -104,16 +98,7 @@ const ERC20_ABI = [
  * submits the transaction. This class never holds private keys.
  */
 export class KlescrowTxBuilder {
-    private readonly factoryIface: Interface;
-    private readonly escrowIface:  Interface;
-    private readonly erc20Iface:   Interface;
-
-    constructor() {
-        // Cast to base Interface — TypeChain's typed overloads are too strict for string-based encoding
-        this.factoryIface = KlescrowFactory__factory.createInterface();
-        this.escrowIface  = Klescrow__factory.createInterface();
-        this.erc20Iface   = new Interface(ERC20_ABI);
-    }
+    constructor(private readonly codec: AbiCodec) {}
 
     // ─── Factory ─────────────────────────────────────────────────────────────
 
@@ -139,8 +124,8 @@ export class KlescrowTxBuilder {
         if (p.settlementDeadlineUnixSec < 0n) throw new Error('settlementDeadlineUnixSec must be >= 0');
         requireBytes32Hex(p.termsHash, 'termsHash');
 
-        const token = tokenOrNull ? requireAddress(tokenOrNull, 'tokenAddress') : ZeroAddress;
-        const isEth = token === ZeroAddress;
+        const token = tokenOrNull ? requireAddress(tokenOrNull, 'tokenAddress') : ZERO_ADDRESS;
+        const isEth = token === ZERO_ADDRESS;
 
         const req = {
             id:                 p.escrowId,
@@ -155,10 +140,10 @@ export class KlescrowTxBuilder {
         };
 
         const data = p.impl
-            ? this.factoryIface.encodeFunctionData(
+            ? this.codec.encode(
                 'createEscrow(address,(bytes32,address,address,address,uint256,uint256,uint256,uint256,bytes32))',
                 [p.impl, req])
-            : this.factoryIface.encodeFunctionData(
+            : this.codec.encode(
                 'createEscrow((bytes32,address,address,address,uint256,uint256,uint256,uint256,bytes32))',
                 [req]);
 
@@ -193,7 +178,7 @@ export class KlescrowTxBuilder {
         requireAddress(p.callerWallet, 'callerWallet');
         requireAddress(p.escrowAddress, 'escrowAddress');
         if (p.ethValue < 0n) throw new Error('ethValue must be >= 0');
-        const data = this.escrowIface.encodeFunctionData('deposit', []);
+        const data = this.codec.encode('deposit()');
         const isEth = p.ethValue > 0n;
         const preview: SigningPreview = {
             action: 'Fund Escrow',
@@ -288,7 +273,7 @@ export class KlescrowTxBuilder {
         requireAddress(p.callerWallet, 'callerWallet');
         requireAddress(p.escrowAddress, 'escrowAddress');
         if (p.arbFeeWei < 0n) throw new Error('arbFeeWei must be >= 0');
-        const data = this.escrowIface.encodeFunctionData('dispute', []);
+        const data = this.codec.encode('dispute()');
         const preview: SigningPreview = {
             action: 'Raise Dispute',
             signer: 'either party',
@@ -306,7 +291,7 @@ export class KlescrowTxBuilder {
         requireAddress(p.callerWallet, 'callerWallet');
         requireAddress(p.escrowAddress, 'escrowAddress');
         if (!p.evidenceUri?.trim()) throw new Error('evidenceUri must not be blank');
-        const data = this.escrowIface.encodeFunctionData('submitEvidence', [p.evidenceUri]);
+        const data = this.codec.encode('submitEvidence(string)', [p.evidenceUri]);
         const preview: SigningPreview = {
             action: 'Submit Evidence',
             signer: 'either party',
@@ -320,7 +305,7 @@ export class KlescrowTxBuilder {
         requireAddress(p.callerWallet, 'callerWallet');
         requireAddress(p.escrowAddress, 'escrowAddress');
         if (p.appealFeeWei < 0n) throw new Error('appealFeeWei must be >= 0');
-        const data = this.escrowIface.encodeFunctionData('appeal', [p.extraData ?? '0x']);
+        const data = this.codec.encode('appeal(bytes)', [p.extraData ?? '0x']);
         const preview: SigningPreview = {
             action: 'Appeal Ruling',
             signer: 'either party',
@@ -338,7 +323,7 @@ export class KlescrowTxBuilder {
         requireAddress(p.callerWallet, 'callerWallet');
         requireAddress(p.escrowAddress, 'escrowAddress');
         const party = requireAddress(p.partyAddress, 'partyAddress');
-        const data = this.escrowIface.encodeFunctionData('removeParty', [party]);
+        const data = this.codec.encode('removeParty(address)', [party]);
         const preview: SigningPreview = {
             action: 'Remove Party',
             signer: 'owner',
@@ -352,7 +337,7 @@ export class KlescrowTxBuilder {
         requireAddress(p.callerWallet, 'callerWallet');
         requireAddress(p.escrowAddress, 'escrowAddress');
         requireBytes32Hex(p.termsHash, 'termsHash');
-        const data = this.escrowIface.encodeFunctionData('updateTermsHash', [p.termsHash]);
+        const data = this.codec.encode('updateTermsHash(bytes32)', [p.termsHash]);
         const preview: SigningPreview = {
             action: 'Update Terms Hash',
             signer: 'either party',
@@ -366,7 +351,7 @@ export class KlescrowTxBuilder {
         requireAddress(p.callerWallet, 'callerWallet');
         requireAddress(p.escrowAddress, 'escrowAddress');
         if (p.newExpiryUnixSec <= 0n) throw new Error('newExpiryUnixSec must be > 0');
-        const data = this.escrowIface.encodeFunctionData('extendExpiry', [p.newExpiryUnixSec]);
+        const data = this.codec.encode('extendExpiry(uint256)', [p.newExpiryUnixSec]);
         const preview: SigningPreview = {
             action: 'Extend Expiry',
             signer: 'either party',
@@ -386,7 +371,7 @@ export class KlescrowTxBuilder {
         const spender = requireAddress(p.spenderAddress, 'spenderAddress');
         requireAddress(p.ownerWallet, 'ownerWallet');
         if (p.amount < 0n) throw new Error('amount must be >= 0');
-        const data = this.erc20Iface.encodeFunctionData('approve', [spender, p.amount]);
+        const data = this.codec.encode('approve(address,uint256)', [spender, p.amount]);
         const preview: SigningPreview = {
             action: 'Approve Token Transfer',
             signer: 'buyer',
@@ -407,7 +392,7 @@ export class KlescrowTxBuilder {
     /** Computes keccak256(UTF-8(uri)) as 0x-prefixed hex. Pass result as CreateEscrowParams.termsHash. */
     static termsHashFromUri(uri: string): string {
         if (!uri?.trim()) throw new Error('uri must not be blank');
-        return keccak256(toUtf8Bytes(uri));
+        return `0x${Array.from(keccak_256(new TextEncoder().encode(uri))).map(byte => byte.toString(16).padStart(2, '0')).join('')}`;
     }
 
     /** Computes platform fee from net amount and basis points. */
@@ -433,7 +418,7 @@ export class KlescrowTxBuilder {
             description: `Call ${fnName}() on the escrow contract.`,
             ...previewOverrides,
         };
-        return noValue(p.escrowAddress, this.escrowIface.encodeFunctionData(fnName, []), cfg.chainId, hint, preview);
+        return noValue(p.escrowAddress, this.codec.encode(`${fnName}()`), cfg.chainId, hint, preview);
     }
 }
 
@@ -448,13 +433,13 @@ function withValue(to: string, data: string, value: bigint, chainId: number, sig
 }
 
 function normalizeOptionalAddress(addr: string | null | undefined, name: string): string {
-    if (addr == null || addr.trim() === '') return ZeroAddress;
+    if (addr == null || addr.trim() === '') return ZERO_ADDRESS;
     return requireAddress(addr, name);
 }
 
 function normalizeOrZero(addr: string | null | undefined): string {
-    if (!addr || addr.trim() === '') return ZeroAddress;
-    try { return getAddress(addr); } catch { return ZeroAddress; }
+    if (!addr || addr.trim() === '') return ZERO_ADDRESS;
+    try { return requireAddress(addr, 'address'); } catch { return ZERO_ADDRESS; }
 }
 
 export function requireBytes32Hex(value: string, name: string): string {

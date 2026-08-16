@@ -1,6 +1,5 @@
-import type { AbstractProvider } from 'ethers';
-import { getAddress } from 'ethers';
 import type { PreparedTx } from './common/index.js';
+import type { AbiCodec, ReadBlockReference, RpcClient } from './common/index.js';
 import type {
     FactoryInfo,
     FeeQuote,
@@ -23,6 +22,7 @@ import { Escrow } from './Escrow.js';
 import { requireAddress, IdGenerator } from './common/index.js';
 import type { MulticallConfig } from './multicall.js';
 import { getFactoryAddress, requireSupportedChainId } from './deployments.js';
+import { decodeRpcChainId, ethGetLogs } from './internal/rpc.js';
 
 // ─── SDK config ───────────────────────────────────────────────────────────────
 
@@ -30,8 +30,9 @@ export interface KlescrowSdkConfig {
     chainId: number;
     /** Defaults to the replayed Klescrow factory address. */
     factoryAddress?: string;
-    /** ethers AbstractProvider (JsonRpcProvider, BrowserProvider, …). */
-    provider: AbstractProvider;
+    rpcClient: RpcClient;
+    codec: AbiCodec;
+    readBlock?: ReadBlockReference;
     /**
      * Current user's wallet address.
      * When set, all write operations pre-fill `callerWallet` automatically.
@@ -60,6 +61,15 @@ export interface KlescrowSdkConfig {
     impl?: EscrowImplementationInfo;
 }
 
+export interface KlescrowFromRpcOptions {
+    readonly codec: AbiCodec;
+    readonly factoryAddress?: string;
+    readonly walletAddress?: string;
+    readonly readBlock?: ReadBlockReference;
+    readonly multicall?: MulticallConfig;
+    readonly implNameOrAddress?: string;
+}
+
 // ─── FactoryHandle ─────────────────────────────────────────────────────────────
 
 /**
@@ -73,7 +83,7 @@ export class FactoryHandle {
         private readonly reader:       KlescrowReader,
         private readonly builder:      KlescrowTxBuilder,
         private readonly decoder:      KlescrowEvents,
-        private readonly provider:     AbstractProvider,
+        private readonly rpcClient:    RpcClient,
         private readonly walletAddress?: string,
         private readonly impl?:        string,
     ) {}
@@ -138,7 +148,7 @@ export class FactoryHandle {
      * Reads all registered escrow implementations from the factory.
      *
      * Returns an ordered list of `{ address, name }` pairs suitable for
-     * passing to {@link KlescrowSdkConfig.impl} or {@link Klescrow.fromProvider}.
+     * passing to {@link KlescrowSdkConfig.impl} or {@link Klescrow.fromRpc}.
      */
     async listImplementations(): Promise<EscrowImplementationInfo[]> {
         const count = await this.reader.readImplementationCount(this.cfg.factoryAddress);
@@ -308,7 +318,7 @@ export class FactoryHandle {
         fromBlock: number | 'earliest' = 0,
         toBlock:   number | 'latest'   = 'latest',
     ): Promise<EscrowCreatedEvent[]> {
-        const rawLogs = await this.provider.getLogs({
+        const rawLogs = await ethGetLogs(this.rpcClient, {
             address:   this.cfg.factoryAddress,
             topics:    [TOPIC_ESCROW_CREATED],
             fromBlock,
@@ -334,10 +344,10 @@ export class FactoryHandle {
         toBlock:    number | 'latest'   = 'latest',
     ): Promise<EscrowCreatedEvent[]> {
         const all = await this.getLogs(fromBlock, toBlock);
-        const normalized = getAddress(requireAddress(party, 'party'));
+        const normalized = requireAddress(party, 'party');
         return all.filter(e => role === 'seller'
-            ? getAddress(e.seller) === normalized
-            : getAddress(e.buyer) === normalized);
+            ? requireAddress(e.seller, 'seller') === normalized
+            : requireAddress(e.buyer, 'buyer') === normalized);
     }
 
     async getLogsByCreator(
@@ -346,7 +356,7 @@ export class FactoryHandle {
         toBlock:     number | 'latest'   = 'latest',
     ): Promise<EscrowCreatedEvent[]> {
         const creatorTopic = '0x000000000000000000000000' + requireAddress(creator, 'creator').toLowerCase().slice(2);
-        const rawLogs = await this.provider.getLogs({
+        const rawLogs = await ethGetLogs(this.rpcClient, {
             address:   this.cfg.factoryAddress,
             topics:    [TOPIC_ESCROW_CREATED, null, creatorTopic],
             fromBlock,
@@ -383,7 +393,7 @@ export class FactoryHandle {
  *
  * Zero-config usage (auto-detects chain + factory from the wallet):
  * ```ts
- * const klescrow = await Klescrow.fromProvider(provider);
+ * const klescrow = await Klescrow.fromRpc(rpcClient, { codec });
  * ```
  *
  * Explicit config (for custom chains or factory addresses):
@@ -391,7 +401,8 @@ export class FactoryHandle {
  * const klescrow = new Klescrow({
  *   chainId:        1,
  *   factoryAddress: '0x…',
- *   provider,
+ *   rpcClient,
+ *   codec,
  *   walletAddress:  '0x…',   // optional — fills callerWallet on all write ops
  *   impl:           { address: '0x…', name: 'Klescrow Single-Party' },  // optional
  * });
@@ -416,7 +427,7 @@ export class Klescrow {
     private readonly _builder:  KlescrowTxBuilder;
     private readonly _events:   KlescrowEvents;
     private readonly _cfg:      KlescrowConfig;
-    private readonly _provider: AbstractProvider;
+    private readonly _rpcClient: RpcClient;
     private readonly _wallet?:  string;
     private readonly _impl?:    string;
     constructor(config: KlescrowSdkConfig) {
@@ -433,10 +444,10 @@ export class Klescrow {
 
         requireAddress(factoryAddress, 'factoryAddress');
         this._cfg      = { chainId, factoryAddress };
-        this._provider = config.provider;
-        this._reader   = new KlescrowReader(config.provider, config.multicall);
-        this._builder  = new KlescrowTxBuilder();
-        this._events   = new KlescrowEvents();
+        this._rpcClient = config.rpcClient;
+        this._reader   = new KlescrowReader(config.rpcClient, config.codec, config.multicall, config.readBlock);
+        this._builder  = new KlescrowTxBuilder(config.codec);
+        this._events   = new KlescrowEvents(config.codec);
         this._wallet   = config.walletAddress;
         this._impl     = config.impl
             ? requireAddress(config.impl.address, 'impl')
@@ -444,7 +455,7 @@ export class Klescrow {
 
         this.factory = new FactoryHandle(
             this._cfg, this._reader, this._builder, this._events,
-            this._provider, this._wallet, this._impl,
+            this._rpcClient, this._wallet, this._impl,
         );
     }
 
@@ -456,74 +467,84 @@ export class Klescrow {
      * return new Klescrow({
      *   chainId,
      *   factoryAddress: FACTORY_ADDRESS,
-     *   provider,
+     *   rpcClient,
+     *   codec,
      *   walletAddress,
      *   impl,
      * });
      * ```
      *
      * @param chainId Any positive integer chain ID.
-     * @param provider The provider to use for interacting with the blockchain.
+     * @param rpcClient The JSON-RPC capability supplied by the application.
      * @param walletAddress The address of the wallet to use for interacting with the escrow.
      * @param impl Optional escrow implementation. Omit to use the factory's live default.
      * @throws if `chainId` is not a positive safe integer.
      */
     static forChain(
         chainId: number,
-        provider: AbstractProvider,
+        rpcClient: RpcClient,
+        codec: AbiCodec,
         walletAddress?: string,
         impl?: EscrowImplementationInfo,
     ): Klescrow {
-        return new Klescrow({ chainId, provider, walletAddress, impl });
+        return new Klescrow({ chainId, rpcClient, codec, walletAddress, impl });
     }
 
     /**
-     * Creates a `Klescrow` instance by auto-detecting the chain from the provider
+     * Creates a `Klescrow` instance by auto-detecting the chain through JSON-RPC
      * and using the canonical replayed factory address.
      *
      * This is the **recommended** entry point — zero config:
      * ```ts
-     * const provider = new ethers.BrowserProvider(window.ethereum);
-     * const klescrow = await Klescrow.fromProvider(provider);
+     * const klescrow = await Klescrow.fromRpc(rpcClient, { codec });
      * ```
      *
      * With optional wallet address (auto-fills callerWallet on write ops):
      * ```ts
-     * const signer = await provider.getSigner();
-     * const klescrow = await Klescrow.fromProvider(provider, await signer.getAddress());
+     * const klescrow = await Klescrow.fromRpc(rpcClient, { codec, walletAddress });
      * ```
      *
      * With a specific escrow implementation by name or address:
      * ```ts
-     * const klescrow = await Klescrow.fromProvider(
-     *     provider, await signer.getAddress(), 'Klescrow Single-Party');
+     * const klescrow = await Klescrow.fromRpc(
+     *     rpcClient, { codec, walletAddress, implNameOrAddress: 'Klescrow Single-Party' });
      * ```
      *
-     * @param provider          Any ethers AbstractProvider (BrowserProvider, JsonRpcProvider, etc.)
+     * @param rpcClient         An application-supplied RpcClient.
      * @param walletAddress     Optional — when set, all write ops pre-fill `callerWallet`.
      * @param implNameOrAddress Optional — name or address of a registered implementation.
      *                          Omit to use the factory's live default.
-     * @throws if the provider returns an invalid chain ID.
+     * @throws if JSON-RPC returns an invalid chain ID.
      * @throws if `implNameOrAddress` is a name that doesn't match any registered implementation.
      */
-    static async fromProvider(
-        provider: AbstractProvider,
-        walletAddress?: string,
-        implNameOrAddress?: string,
+    static async fromRpc(
+        rpcClient: RpcClient,
+        options: KlescrowFromRpcOptions,
     ): Promise<Klescrow> {
-        const { chainId } = await provider.getNetwork();
-        const chainIdNumber = Klescrow._normalizeChainId(Number(chainId));
-        const factoryAddress = getFactoryAddress(chainIdNumber);
+        const chainId = Klescrow._normalizeChainId(
+            decodeRpcChainId(await rpcClient.request({ method: 'eth_chainId', params: [] })),
+        );
+        const factoryAddress = options.factoryAddress ?? getFactoryAddress(chainId);
         if (!factoryAddress) {
-            throw new Error(`Unsupported chain ID: ${chainIdNumber}`);
+            throw new Error(`Unsupported chain ID: ${chainId}`);
         }
 
+        const reader = new KlescrowReader(rpcClient, options.codec, options.multicall, options.readBlock);
         let impl: EscrowImplementationInfo | undefined;
-        if (implNameOrAddress) {
-            impl = await this._resolveImpl(provider, factoryAddress, implNameOrAddress);
+        if (options.implNameOrAddress) {
+            impl = await this._resolveImpl(reader, factoryAddress, options.implNameOrAddress);
         }
 
-        return new Klescrow({ chainId: chainIdNumber, provider, walletAddress, impl });
+        return new Klescrow({
+            chainId,
+            rpcClient,
+            codec: options.codec,
+            factoryAddress,
+            walletAddress: options.walletAddress,
+            readBlock: options.readBlock,
+            multicall: options.multicall,
+            impl,
+        });
     }
 
     private static _normalizeChainId(chainId: number): number {
@@ -534,7 +555,7 @@ export class Klescrow {
     }
 
     private static async _resolveImpl(
-        provider: AbstractProvider,
+        reader: KlescrowReader,
         factoryAddress: string,
         nameOrAddress: string,
     ): Promise<EscrowImplementationInfo> {
@@ -543,7 +564,6 @@ export class Klescrow {
             return { address: requireAddress(nameOrAddress, 'impl'), name: '' };
         }
         // Name: read factory, find match
-        const reader = new KlescrowReader(provider);
         const count  = await reader.readImplementationCount(factoryAddress);
         const impls  = await Promise.all(
             Array.from({ length: count }, (_, i) =>
@@ -565,7 +585,7 @@ export class Klescrow {
     escrow(address: string): Escrow {
         return new Escrow(
             requireAddress(address, 'escrowAddress'),
-            this._cfg, this._reader, this._builder, this._events, this._provider, this._wallet,
+            this._cfg, this._reader, this._builder, this._events, this._rpcClient, this._wallet,
         );
     }
 
