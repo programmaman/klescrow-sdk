@@ -4,6 +4,12 @@ All notable public changes to `@rakelabs/klescrow-sdk` are documented here.
 
 ## Unreleased
 
+## 0.2.1
+
+### Changed
+
+- Updated the direct `@noble/hashes` dependency to 2.3.0 and migrated Keccak imports to its v2 ESM subpath.
+
 ## 0.2.0
 
 ### Breaking
