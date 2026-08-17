@@ -16,6 +16,7 @@ The approval spender is the escrow clone, not the factory.
 ```ts
 import { BrowserProvider } from 'ethers';
 import { Klescrow, KlescrowTxBuilder, ABI as KLESCROW_ABI } from '@rakelabs/klescrow-sdk';
+import { createEthersAbiCodec, createEthersRpcClient } from '@rakelabs/ethers-adapter';
 
 const provider = new BrowserProvider(window.ethereum);
 const signer = await provider.getSigner();

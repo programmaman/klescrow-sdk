@@ -2,6 +2,25 @@
 
 This guide is for integrations that need more control than the README happy path: open-party escrows, implementation pinning, direct builders, direct readers, multicall, event indexing, and wallet-library adapters.
 
+## Adapter setup
+
+Klescrow accepts an injected `RpcClient` and `AbiCodec`. With Ethers v6:
+
+```ts
+import { BrowserProvider } from 'ethers';
+import { ABI } from '@rakelabs/klescrow-sdk';
+import { createEthersAbiCodec, createEthersRpcClient } from '@rakelabs/ethers-adapter';
+
+const provider = new BrowserProvider(window.ethereum);
+const signer = await provider.getSigner();
+const walletAddress = await signer.getAddress();
+const rpcClient = createEthersRpcClient(provider);
+const codec = createEthersAbiCodec(ABI);
+```
+
+Use `@rakelabs/viem-adapter` to create the same two dependencies from a Viem
+public client. The signer or wallet client remains application-owned.
+
 ## Choose the Right Layer
 
 Most apps should use the facade:

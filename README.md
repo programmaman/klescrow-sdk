@@ -11,7 +11,10 @@ Your app -> Klescrow SDK -> unsigned transaction -> user wallet -> blockchain
 ## Install
 
 ```bash
-npm install @rakelabs/klescrow-sdk
+# Choose one integration. The SDK core has no Ethers or Viem dependency.
+npm install @rakelabs/klescrow-sdk @rakelabs/ethers-adapter ethers
+# or
+npm install @rakelabs/klescrow-sdk @rakelabs/viem-adapter viem
 ```
 
 Requirements:
@@ -35,7 +38,13 @@ Every write method returns a `PreparedTx` with a `preview` field. Show that prev
 ## Quick Start
 
 ```ts
+import { BrowserProvider } from 'ethers';
 import { Klescrow, KlescrowTxBuilder, ABI as KLESCROW_ABI } from '@rakelabs/klescrow-sdk';
+import { createEthersAbiCodec, createEthersRpcClient } from '@rakelabs/ethers-adapter';
+
+const provider = new BrowserProvider(window.ethereum);
+await provider.send('eth_requestAccounts', []);
+const signer = await provider.getSigner();
 
 const rpcClient = createEthersRpcClient(provider);
 const codec = createEthersAbiCodec(KLESCROW_ABI);
@@ -145,12 +154,16 @@ For ERC20 escrows, prepare the ERC20 creation flow with `prepareCreateErc20Escro
 
 ## Documentation
 
+This README and the linked guides describe the unreleased `0.2.0` API until
+that version is tagged. For `0.1.x` usage, open the matching Git release tag.
+
 | Document | Use it for |
 | --- | --- |
 | [docs/reference.md](docs/reference.md) | API reference, types, actions, events, and common mistakes |
 | [docs/erc20-escrow.md](docs/erc20-escrow.md) | ERC20 escrow setup and token approval flow |
 | [docs/disputes.md](docs/disputes.md) | Dispute, evidence, ruling, and appeal lifecycle |
 | [docs/advanced.md](docs/advanced.md) | Reader, transaction builder, multicall, and implementation selection |
+| [docs/migration-0.1-to-0.2.md](docs/migration-0.1-to-0.2.md) | Migrate from provider-based initialization |
 | [docs/on-chain.md](docs/on-chain.md) | Contract-level behavior and event model |
 
 ## Safety Notes

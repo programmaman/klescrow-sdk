@@ -58,6 +58,10 @@ interface KlescrowSdkConfig {
 }
 ```
 
+Create `rpcClient` and `codec` with `@rakelabs/ethers-adapter`,
+`@rakelabs/viem-adapter`, or your own implementations. The SDK does not
+instantiate a provider or signer.
+
 ## Factory Reads
 
 | Method | Returns |
