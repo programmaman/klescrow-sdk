@@ -1,95 +1,65 @@
-import { Interface, type AbstractProvider } from 'ethers';
-
-/**
- * Minimal Multicall3 ABI — only aggregate3 is needed for batched reads.
- * We mark it view in our local ABI so ethers routes it through eth_call automatically.
- * The canonical Multicall3 address is 0xcA11bde05977b3631167028862bE2a173976CA11
- * on most EVM chains, but supply the correct address per-chain via MulticallConfig.
- */
-const MULTICALL3_ABI = [
-    'function aggregate3(tuple(address target, bool allowFailure, bytes callData)[] calls) ' +
-    'view returns (tuple(bool success, bytes returnData)[] returnData)',
-] as const;
-
-type Multicall3Result = {
-    success: boolean;
-    returnData: string;
-};
-
-const multicall3Iface = new Interface(MULTICALL3_ABI);
-
-// ─── Config ────────────────────────────────────────────────────────────────────
+import type { AbiCodec, DecodedError, Hex } from './common/AbiCodec.js';
+import type { ReadBlockReference, RpcClient } from './common/index.js';
 
 export interface MulticallConfig {
-    /** Deployed Multicall3 contract address for this chain. */
     address: string;
-    /**
-     * When true (default), throw a descriptive error if any batched call
-     * reports success=false.  Set to false only when you want to handle
-     * per-call failures yourself.
-     */
-    requireSuccess?: boolean;
 }
-
-// ─── Batch call types ──────────────────────────────────────────────────────────
 
 export interface EncodedReadCall<T = unknown> {
-    /** Contract address to call. */
     target: string;
-    /** Human-readable method name — included in thrown error messages on failure. */
     method: string;
-    /** ABI-encoded calldata for this call target. */
-    callData: string;
-    /** Decode the raw returnData bytes into the desired type T. */
-    decode: (returnData: string) => T;
+    callData: Hex;
+    decode: (returnData: Hex) => T;
 }
 
-// ─── Executor ─────────────────────────────────────────────────────────────────
+interface MulticallResult {
+    readonly success: boolean;
+    readonly returnData: Hex;
+}
 
-/**
- * Batch multiple read calls through Multicall3's `aggregate3` function.
- *
- * All inner calls use `allowFailure: true` at the Multicall3 level so partial
- * failures are surfaced as results instead of reverting the whole batch.
- * The `requireSuccess` flag (default: true) then controls whether a failed
- * inner call throws in JavaScript.
- *
- * @param provider        Any ethers AbstractProvider (JsonRpcProvider, BrowserProvider, …).
- * @param multicallAddress Deployed Multicall3 address on the target chain.
- * @param calls            Ordered list of encoded read calls.
- * @param requireSuccess   Throw if any call fails (default: true).
- */
+export class MulticallCallError extends Error {
+    constructor(
+        readonly index: number,
+        readonly method: string,
+        readonly target: string,
+        readonly returnData: Hex,
+        readonly decodedError?: DecodedError,
+    ) {
+        super(`Multicall3 call failed — method="${method}" target=${target}`);
+        this.name = 'MulticallCallError';
+    }
+}
+
 export async function executeMulticall<T>(
-    provider: AbstractProvider,
+    rpcClient: RpcClient,
+    codec: AbiCodec,
     multicallAddress: string,
-    calls: EncodedReadCall<T>[],
-    requireSuccess = true,
+    calls: readonly EncodedReadCall<T>[],
+    readBlock: ReadBlockReference = 'latest',
 ): Promise<T[]> {
     if (calls.length === 0) return [];
 
-    // Always pass allowFailure=true to aggregate3 so failed calls return (false, 0x)
-    // instead of reverting the whole batch — we enforce requireSuccess ourselves in JS.
-    const batch = calls.map(c => ({
-        target:        c.target,
-        allowFailure:  true,
-        callData:      c.callData,
+    const batch = calls.map(call => ({
+        target: call.target,
+        allowFailure: true,
+        callData: call.callData,
     }));
+    const data = codec.encode('aggregate3((address,bool,bytes)[])', [batch]);
+    const raw = await rpcClient.call({ to: multicallAddress, data, block: readBlock });
+    const [decoded] = codec.decode('aggregate3((address,bool,bytes)[])', raw);
+    const results = decoded as readonly MulticallResult[];
 
-    const encoded = multicall3Iface.encodeFunctionData('aggregate3', [batch]);
-    const resultData = await provider.call({
-        to:   multicallAddress,
-        data: encoded,
-    });
-    const decoded = multicall3Iface.decodeFunctionResult('aggregate3', resultData);
-    const rawResults = decoded[0] as Multicall3Result[];
-
-    return rawResults.map((r, i) => {
-        const c = calls[i];
-        if (!r.success && requireSuccess) {
-            throw new Error(
-                `Multicall3 call failed — method="${c.method}" target=${c.target}`,
+    return results.map((result, index) => {
+        const call = calls[index];
+        if (!result.success) {
+            throw new MulticallCallError(
+                index,
+                call.method,
+                call.target,
+                result.returnData,
+                codec.decodeError(result.returnData),
             );
         }
-        return c.decode(r.returnData);
+        return call.decode(result.returnData);
     });
 }

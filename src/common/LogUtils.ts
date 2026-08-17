@@ -31,12 +31,11 @@ export function matchesTopic(log: EvmLog, topic0: string): boolean {
 export function decodeIndexedAddress(topic: string): string {
     const hex = stripHex(topic);
     if (hex.length !== 64) throw new Error('indexed address topic must be 32 bytes');
-    return '0x' + hex.slice(24); // last 20 bytes
+    return '0x' + hex.slice(24);
 }
 
 /**
  * Decodes a raw indexed bytes32 topic into a 0x-prefixed 32-byte hex string.
- * Useful for escrowId / paymentId / disputeId indexed fields.
  */
 export function decodeIndexedBytes32(topic: string): string {
     const hex = stripHex(topic);

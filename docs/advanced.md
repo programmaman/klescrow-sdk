@@ -7,7 +7,7 @@ This guide is for integrations that need more control than the README happy path
 Most apps should use the facade:
 
 ```ts
-const klescrow = await Klescrow.fromProvider(provider, walletAddress);
+const klescrow = await Klescrow.fromRpc(rpcClient, { codec, walletAddress });
 const { tx } = await klescrow.factory.prepareCreateEthEscrow(params);
 const escrow = klescrow.escrow('0xESCROW_ADDRESS');
 ```
@@ -31,7 +31,8 @@ import { Klescrow } from '@rakelabs/klescrow-sdk';
 const klescrow = new Klescrow({
   chainId: 11155111,
   factoryAddress: '0xFACTORY_ADDRESS',
-  provider,
+  rpcClient,
+  codec,
   walletAddress,
   multicall: {
     address: '0xcA11bde05977b3631167028862bE2a173976CA11',
@@ -39,7 +40,7 @@ const klescrow = new Klescrow({
 });
 ```
 
-`fromProvider()` is better for normal app flows. The constructor is better for infrastructure, tests, custom deployments, and indexed backends.
+`fromRpc()` is convenient when the chain ID should be detected through RPC. The constructor is better for infrastructure, tests, custom deployments, and indexed backends.
 
 ## Open-Party Escrows
 
@@ -92,20 +93,21 @@ const impls = await klescrow.factory.listImplementations();
 const pinned = new Klescrow({
   chainId: 11155111,
   factoryAddress: '0xFACTORY_ADDRESS',
-  provider,
+  rpcClient,
+  codec,
   walletAddress,
   impl: impls[0],
 });
 ```
 
-You can also resolve by name or address through `fromProvider()`:
+You can also resolve by name or address through `fromRpc()`:
 
 ```ts
-const klescrow = await Klescrow.fromProvider(
-  provider,
+const klescrow = await Klescrow.fromRpc(rpcClient, {
+  codec,
   walletAddress,
-  'Klescrow Single-Party',
-);
+  implNameOrAddress: 'Klescrow Single-Party',
+});
 ```
 
 Pinning affects create and predict calls. Existing escrow handles are bound to a deployed clone address and do not need implementation selection.
@@ -154,7 +156,8 @@ The ERC20 approval spender is the predicted escrow clone, not the factory.
 const klescrow = new Klescrow({
   chainId: 1,
   factoryAddress: '0xFACTORY_ADDRESS',
-  provider,
+  rpcClient,
+  codec,
   walletAddress,
   multicall: {
     address: '0xcA11bde05977b3631167028862bE2a173976CA11',
@@ -173,7 +176,7 @@ Only configure multicall for chains where the address is deployed.
 ```ts
 import { KlescrowTxBuilder, IdGenerator } from '@rakelabs/klescrow-sdk';
 
-const builder = new KlescrowTxBuilder();
+const builder = new KlescrowTxBuilder(codec);
 const cfg = { chainId: 11155111, factoryAddress: '0xFACTORY_ADDRESS' };
 
 const tx = builder.createEthEscrow(cfg, {
@@ -194,10 +197,9 @@ Use direct builders in backends, transaction simulators, tests, and account-abst
 ## Direct Reader
 
 ```ts
-import { JsonRpcProvider } from 'ethers';
 import { KlescrowReader } from '@rakelabs/klescrow-sdk';
 
-const reader = new KlescrowReader(new JsonRpcProvider(process.env.RPC_URL));
+const reader = new KlescrowReader(rpcClient, codec);
 
 const factory = await reader.readFactory('0xFACTORY_ADDRESS');
 const escrow = await reader.readEscrow('0xESCROW_ADDRESS');
@@ -219,12 +221,12 @@ const evidence = await klescrow.escrow('0xESCROW_ADDRESS').getEvidence();
 For custom indexers, decode raw logs:
 
 ```ts
-import { KlescrowEvents, KlescrowTopics } from '@rakelabs/klescrow-sdk';
+import { KlescrowEvents, EVENT_TOPICS } from '@rakelabs/klescrow-sdk';
 
-const events = new KlescrowEvents();
-const logs = await provider.getLogs({
+const events = new KlescrowEvents(codec);
+const logs = await rpcClient.getLogs({
   address: factoryAddress,
-  topics: [KlescrowTopics.ESCROW_CREATED],
+  topics: [EVENT_TOPICS.EscrowCreated],
   fromBlock: 0,
   toBlock: 'latest',
 });

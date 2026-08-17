@@ -9,11 +9,8 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "paths": {
-      "ethers": ["./node_modules/ethers/lib.esm/index.d.ts"]
-    }
+    "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*", "generated/**/*"],
-  "exclude": ["dist", "node_modules", "src/typechain-types/**/*"]
+  "include": ["src/**/*"],
+  "exclude": ["dist", "node_modules"]
 }

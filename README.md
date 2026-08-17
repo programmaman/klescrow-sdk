@@ -1,6 +1,6 @@
 # @rakelabs/klescrow-sdk
 
-Add escrow-backed transactions to an ethers v6 app. Klescrow prepares unsigned transactions for escrow creation, deposits, releases, refunds, evidence, disputes, and appeals; your user's wallet still signs and broadcasts every transaction.
+Add escrow-backed transactions to a TypeScript app. Klescrow prepares unsigned transactions for escrow creation, deposits, releases, refunds, evidence, disputes, and appeals; your user's wallet still signs and broadcasts every transaction.
 
 The SDK never holds private keys and never takes custody of funds.
 
@@ -11,14 +11,14 @@ Your app -> Klescrow SDK -> unsigned transaction -> user wallet -> blockchain
 ## Install
 
 ```bash
-npm install @rakelabs/klescrow-sdk ethers
+npm install @rakelabs/klescrow-sdk
 ```
 
 Requirements:
 
 - Node.js 20+
-- ethers v6
-- an EIP-1193 wallet provider, JSON-RPC provider, or compatible ethers provider
+- an application-supplied `RpcClient` and `AbiCodec`
+- an optional ethers or viem integration package for creating those dependencies
 
 ## What You Build With It
 
@@ -35,20 +35,16 @@ Every write method returns a `PreparedTx` with a `preview` field. Show that prev
 ## Quick Start
 
 ```ts
-import { BrowserProvider, ethers } from 'ethers';
-import { Klescrow, KlescrowTxBuilder } from '@rakelabs/klescrow-sdk';
+import { Klescrow, KlescrowTxBuilder, ABI as KLESCROW_ABI } from '@rakelabs/klescrow-sdk';
 
-const provider = new BrowserProvider(window.ethereum);
-await provider.send('eth_requestAccounts', []);
-
-const signer = await provider.getSigner();
+const rpcClient = createEthersRpcClient(provider);
+const codec = createEthersAbiCodec(KLESCROW_ABI);
 const buyerAddress = await signer.getAddress();
-
-const klescrow = await Klescrow.fromProvider(provider, buyerAddress);
+const klescrow = await Klescrow.fromRpc(rpcClient, { codec, walletAddress: buyerAddress });
 
 const now = BigInt(Math.floor(Date.now() / 1000));
 const { tx: createTx, escrowId } = await klescrow.factory.prepareCreateEthEscrow({
-  netAmount: ethers.parseEther('1'),
+  netAmount: 1_000_000_000_000_000_000n,
   sellerAddress: '0xSELLER_ADDRESS',
   obligationDeadlineUnixSec: now + 7n * 24n * 60n * 60n,
   settlementDeadlineUnixSec: 0n,
@@ -147,27 +143,6 @@ For ETH escrows, the SDK includes the required ETH value in the prepared transac
 
 For ERC20 escrows, prepare the ERC20 creation flow with `prepareCreateErc20Escrow(...)`, approve the token allowance as needed, then create and deposit through the escrow contract. See [docs/erc20-escrow.md](docs/erc20-escrow.md).
 
-## Errors
-
-Use `decodeKlescrowError` to turn raw revert data into a readable contract error.
-
-```ts
-import { decodeKlescrowError } from '@rakelabs/klescrow-sdk';
-
-try {
-  await signer.sendTransaction({
-    to: tx.to,
-    data: tx.data,
-    value: BigInt(tx.value),
-  });
-} catch (err) {
-  const decoded = decodeKlescrowError(err);
-  if (decoded && 'error' in decoded) {
-    console.error(decoded.error, decoded.args);
-  }
-}
-```
-
 ## Documentation
 
 | Document | Use it for |
@@ -175,7 +150,6 @@ try {
 | [docs/reference.md](docs/reference.md) | API reference, types, actions, events, and common mistakes |
 | [docs/erc20-escrow.md](docs/erc20-escrow.md) | ERC20 escrow setup and token approval flow |
 | [docs/disputes.md](docs/disputes.md) | Dispute, evidence, ruling, and appeal lifecycle |
-| [docs/error-decoder.md](docs/error-decoder.md) | Revert decoding details |
 | [docs/advanced.md](docs/advanced.md) | Reader, transaction builder, multicall, and implementation selection |
 | [docs/on-chain.md](docs/on-chain.md) | Contract-level behavior and event model |
 

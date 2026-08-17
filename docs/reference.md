@@ -10,7 +10,6 @@ import {
   KlescrowTxBuilder,
   KlescrowEvents,
   KlescrowTopics,
-  decodeKlescrowError,
   EscrowState,
   EscrowIntent,
   IdGenerator,
@@ -39,8 +38,8 @@ enum EscrowIntent {
 
 | Method | Purpose |
 | --- | --- |
-| `Klescrow.fromProvider(provider, walletAddress?, implNameOrAddress?)` | Detect chain and default factory from provider. |
-| `Klescrow.forChain(chainId, provider, walletAddress?, impl?)` | Use the canonical factory address for a specific chain ID. |
+| `Klescrow.fromRpc(rpcClient, { codec, walletAddress?, implNameOrAddress? })` | Detect chain and default factory through the injected RPC client. |
+| `Klescrow.forChain(chainId, rpcClient, codec, walletAddress?, impl?)` | Use the canonical factory address for a specific chain ID. |
 | `new Klescrow(config)` | Use explicit factory, chain, multicall, and implementation config. |
 | `klescrow.escrow(address)` | Return a bound escrow handle. No network call. |
 | `klescrow.termsHashFromUri(uri)` | Hash a terms URI into the bytes32 value expected on-chain. |
@@ -51,7 +50,8 @@ enum EscrowIntent {
 interface KlescrowSdkConfig {
   chainId: number;
   factoryAddress: string;
-  provider: AbstractProvider;
+  rpcClient: RpcClient;
+  codec: AbiCodec;
   walletAddress?: string;
   multicall?: { address: string };
   impl?: { address: string; name: string };
