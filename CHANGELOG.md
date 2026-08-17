@@ -8,6 +8,7 @@ All notable public changes to `@rakelabs/klescrow-sdk` are documented here.
 
 ### Breaking
 
+- Decoupled the SDK from Ethers and Viem runtime APIs and dependencies; integrations now supply provider-specific adapters.
 - Replaced the generic RPC request boundary with explicit `call`, `getLogs`, `getChainId`, and `getBlock` operations.
 
 ### Changed
