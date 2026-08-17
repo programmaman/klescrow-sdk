@@ -4,10 +4,16 @@ All notable public changes to `@rakelabs/klescrow-sdk` are documented here.
 
 ## Unreleased
 
+## 0.2.0
+
+### Breaking
+
+- Replaced the generic RPC request boundary with explicit `call`, `getLogs`, `getChainId`, and `getBlock` operations.
+
 ### Changed
 
-- Replaced generic RPC request dispatch with explicit call, log, chain, and block operations.
-- Kept provider-specific transaction and error handling in the integration adapters.
+- Updated escrow reads, event queries, and multicall flows to use the explicit RPC operations.
+- Kept provider-specific transaction submission and revert handling in the integration adapters.
 
 ## 0.1.4
 
