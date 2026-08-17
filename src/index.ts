@@ -81,7 +81,14 @@ export type {
 
 // ─── Common ─────────────────────────────────────────────────────────────────
 export type { PreparedTx } from './common/PreparedTx.js';
-export type { PreparedRpc, ReadBlockReference, ReadBlockTag, RpcClient } from './common/RpcClient.js';
+export type {
+    BlockInfo,
+    CallRequest,
+    LogFilter,
+    ReadBlockReference,
+    ReadBlockTag,
+    RpcClient,
+} from './common/RpcClient.js';
 export type { AbiCodec, DecodedError, DecodedEvent, Hex } from './common/AbiCodec.js';
 export type { SigningPreview, FeeBreakdown, FeeLineItem } from './common/TxPreview.js';
 export {

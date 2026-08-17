@@ -13,3 +13,5 @@ run-dispute-e2e.ps1
 /future-work.md
 /abi/
 /scripts/generate-abi.mjs
+/scripts/ensure-test-adapters.mjs
+/scripts/run-native-e2e-matrix.mjs

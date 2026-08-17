@@ -14,7 +14,6 @@ import { KlescrowReader } from './KlescrowReader.js';
 import { KlescrowTxBuilder } from './KlescrowTxBuilder.js';
 import { KlescrowEvents, TOPIC_EVIDENCE } from './KlescrowEvents.js';
 import { ZERO_ADDRESS as ZeroAddress } from './common/index.js';
-import { ethGetLogs } from './internal/rpc.js';
 
 /**
  * A handle bound to a specific deployed Klescrow clone.
@@ -181,7 +180,7 @@ export class Escrow {
         fromBlock: number | 'earliest' = 0,
         toBlock:   number | 'latest'   = 'latest',
     ): Promise<EscrowEvidenceEvent[]> {
-        const rawLogs = await ethGetLogs(this.rpcClient, {
+        const rawLogs = await this.rpcClient.getLogs({
             address:   this.address,
             topics:    [TOPIC_EVIDENCE],
             fromBlock,
@@ -335,7 +334,7 @@ export class Escrow {
         fromBlock: number | 'earliest' = 0,
         toBlock:   number | 'latest'   = 'latest',
     ): Promise<EscrowEvent[]> {
-        const rawLogs = await ethGetLogs(this.rpcClient, {
+        const rawLogs = await this.rpcClient.getLogs({
             address:   this.address,
             fromBlock,
             toBlock,

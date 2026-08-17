@@ -55,12 +55,12 @@ export const TOPIC_EXPIRY_EXTENSION_CONSENTED = EVENT_TOPICS.ExpiryExtensionCons
 /**
  * All Klescrow event topic0 hashes as a single object.
  *
- * Use this for custom `eth_getLogs` topic filtering.
+ * Use this with `RpcClient.getLogs` for custom topic filtering.
  * This is the only public export of topic hashes — individual TOPIC_* constants
  * are intentionally not re-exported from the package index.
  *
  * @example
- * rpc.request({ method: 'eth_getLogs', params: [{ topics: [KlescrowTopics.FUNDED], address: cloneAddr }] })
+ * rpcClient.getLogs({ topics: [KlescrowTopics.FUNDED], address: cloneAddr })
  */
 export const KlescrowTopics = {
     ESCROW_CREATED:             TOPIC_ESCROW_CREATED,

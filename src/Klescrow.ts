@@ -22,7 +22,6 @@ import { Escrow } from './Escrow.js';
 import { requireAddress, IdGenerator } from './common/index.js';
 import type { MulticallConfig } from './multicall.js';
 import { getFactoryAddress, requireSupportedChainId } from './deployments.js';
-import { decodeRpcChainId, ethGetLogs } from './internal/rpc.js';
 
 // SDK configuration
 
@@ -260,7 +259,7 @@ export class FactoryHandle {
         fromBlock: number | 'earliest' = 0,
         toBlock:   number | 'latest'   = 'latest',
     ): Promise<EscrowCreatedEvent[]> {
-        const rawLogs = await ethGetLogs(this.rpcClient, {
+        const rawLogs = await this.rpcClient.getLogs({
             address:   this.cfg.factoryAddress,
             topics:    [TOPIC_ESCROW_CREATED],
             fromBlock,
@@ -300,7 +299,7 @@ export class FactoryHandle {
         toBlock:     number | 'latest'   = 'latest',
     ): Promise<EscrowCreatedEvent[]> {
         const creatorTopic = '0x000000000000000000000000' + requireAddress(creator, 'creator').toLowerCase().slice(2);
-        const rawLogs = await ethGetLogs(this.rpcClient, {
+        const rawLogs = await this.rpcClient.getLogs({
             address:   this.cfg.factoryAddress,
             topics:    [TOPIC_ESCROW_CREATED, null, creatorTopic],
             fromBlock,
@@ -397,9 +396,7 @@ export class Klescrow {
         rpcClient: RpcClient,
         options: KlescrowFromRpcOptions,
     ): Promise<Klescrow> {
-        const chainId = Klescrow._normalizeChainId(
-            decodeRpcChainId(await rpcClient.request({ method: 'eth_chainId', params: [] })),
-        );
+        const chainId = Klescrow._normalizeChainId(await rpcClient.getChainId());
         const factoryAddress = options.factoryAddress ?? getFactoryAddress(chainId);
         if (!factoryAddress) {
             throw new Error(`Unsupported chain ID: ${chainId}`);

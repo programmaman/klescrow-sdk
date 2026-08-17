@@ -1,7 +1,6 @@
 import { requireAddress, ZERO_ADDRESS } from './common/index.js';
 import type { AbiCodec, Hex } from './common/AbiCodec.js';
 import type { ReadBlockReference, RpcClient } from './common/index.js';
-import { encodeRpcBlockReference, ethCall, type RpcBlockIdentifier } from './internal/rpc.js';
 import {
     type FactoryInfo,
     type FeeQuote,
@@ -20,14 +19,14 @@ export class KlescrowReader {
     private readonly _multicall?: MulticallConfig;
     private readonly _rpcClient: RpcClient;
     private readonly _codec: AbiCodec;
-    private readonly _readBlock: RpcBlockIdentifier;
+    private readonly _readBlock: ReadBlockReference;
     readonly readEscrow: EscrowReadable<[escrowAddress: string]>;
 
     constructor(rpcClient: RpcClient, codec: AbiCodec, multicallConfig?: MulticallConfig, readBlock: ReadBlockReference = 'latest') {
         this._rpcClient = rpcClient;
         this._codec = codec;
         this._multicall = multicallConfig;
-        this._readBlock = encodeRpcBlockReference(readBlock);
+        this._readBlock = readBlock;
         this.readEscrow = Object.assign(
             (escrowAddress: string) => this._readEscrowSnapshot(escrowAddress),
             {
@@ -228,7 +227,9 @@ export class KlescrowReader {
         return this._codec.decode(signature, await this._call({ to: addr, data: this._codec.encode(signature) }))[0];
     }
 
-    private _call(request: { to: string; data: Hex }): Promise<Hex> { return ethCall(this._rpcClient, request, this._readBlock); }
+    private _call(request: { to: string; data: Hex }): Promise<Hex> {
+        return this._rpcClient.call({ ...request, block: this._readBlock });
+    }
 }
 
 export { EscrowState, EscrowIntent };

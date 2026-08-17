@@ -4,6 +4,11 @@ All notable public changes to `@rakelabs/klescrow-sdk` are documented here.
 
 ## Unreleased
 
+### Changed
+
+- Replaced generic RPC request dispatch with explicit call, log, chain, and block operations.
+- Kept provider-specific transaction and error handling in the integration adapters.
+
 ## 0.1.4
 
 ### Added

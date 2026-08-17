@@ -1,6 +1,5 @@
 import type { AbiCodec, DecodedError, Hex } from './common/AbiCodec.js';
-import type { RpcClient } from './common/index.js';
-import { ethCall, type RpcBlockIdentifier } from './internal/rpc.js';
+import type { ReadBlockReference, RpcClient } from './common/index.js';
 
 export interface MulticallConfig {
     address: string;
@@ -36,7 +35,7 @@ export async function executeMulticall<T>(
     codec: AbiCodec,
     multicallAddress: string,
     calls: readonly EncodedReadCall<T>[],
-    readBlock: RpcBlockIdentifier = 'latest',
+    readBlock: ReadBlockReference = 'latest',
 ): Promise<T[]> {
     if (calls.length === 0) return [];
 
@@ -46,7 +45,7 @@ export async function executeMulticall<T>(
         callData: call.callData,
     }));
     const data = codec.encode('aggregate3((address,bool,bytes)[])', [batch]);
-    const raw = await ethCall(rpcClient, { to: multicallAddress, data }, readBlock);
+    const raw = await rpcClient.call({ to: multicallAddress, data, block: readBlock });
     const [decoded] = codec.decode('aggregate3((address,bool,bytes)[])', raw);
     const results = decoded as readonly MulticallResult[];
 

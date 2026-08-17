@@ -224,14 +224,11 @@ For custom indexers, decode raw logs:
 import { KlescrowEvents, EVENT_TOPICS } from '@rakelabs/klescrow-sdk';
 
 const events = new KlescrowEvents(codec);
-const logs = await rpcClient.request({
-  method: 'eth_getLogs',
-  params: [{
-    address: factoryAddress,
-    topics: [EVENT_TOPICS.EscrowCreated],
-    fromBlock: '0x0',
-    toBlock: 'latest',
-  }],
+const logs = await rpcClient.getLogs({
+  address: factoryAddress,
+  topics: [EVENT_TOPICS.EscrowCreated],
+  fromBlock: 0,
+  toBlock: 'latest',
 });
 
 for (const log of logs) {
